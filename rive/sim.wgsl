@@ -13,8 +13,9 @@
 struct StringDrive {
     // Its two ends in scene space, 0 to 1 with y down: a.xy then b.xy.
     ends: vec4<f32>,
-    // x: how hard it pushes this step, signed. y: reach in scene space, as
-    // a fraction of the height. z, w: unused.
+    // x: how hard it pushes this step, signed. y: radius of the push in
+    // scene space, as a fraction of the height. z: where along the string,
+    // 0 to 1, it was plucked. w: unused.
     drive: vec4<f32>,
 };
 
@@ -51,16 +52,14 @@ fn load(at: vec2<i32>, limit: vec2<i32>) -> vec4<f32> {
     return textureLoad(state, clamp(at, vec2<i32>(0, 0), limit), 0);
 }
 
-// How strongly a string pushes at p: strongest under its middle, where a
-// string swings widest, and nothing at its fixed ends or beyond its reach.
+// How strongly a string pushes at p: the ripples start where the string was
+// plucked, the point the sound comes from, and spread out from there.
 fn stringPush(p: vec2<f32>, line: StringDrive) -> f32 {
     let scale = vec2<f32>(sim.aspect, 1.0);
-    let pa = (p - line.ends.xy) * scale;
-    let ba = (line.ends.zw - line.ends.xy) * scale;
-    let along = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
-    let distance = length(pa - ba * along);
-    let swing = sin(along * 3.14159265);
-    return smoothstep(line.drive.y, 0.0, distance) * swing * line.drive.x;
+    let source = mix(line.ends.xy, line.ends.zw, line.drive.z);
+    let distance = length((p - source) * scale);
+    let falloff = exp(-(distance * distance) / (line.drive.y * line.drive.y));
+    return falloff * line.drive.x;
 }
 
 @fragment
