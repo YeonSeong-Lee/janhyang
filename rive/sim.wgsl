@@ -2,25 +2,31 @@
 //
 // State texel: r = height, g = velocity, b = ink, a = unused.
 // On a float target the values are stored as they are. On an 8 bit target
-// height and velocity are stored around 0.5, which `bias` and `gain` undo.
+// height and velocity are stored around 0.5, which `bias` undoes.
 //
 // Neighbours are read with textureLoad at the fragment's own pixel, so a
 // texel always reads the storage it was written to, whichever way up the
 // backend keeps a render target. Positions in the scene come from clip
 // space instead, which every backend agrees on.
 
+// One string shaking the surface under it.
+struct StringDrive {
+    // Its two ends in scene space, 0 to 1 with y down: a.xy then b.xy.
+    ends: vec4<f32>,
+    // x: how hard it pushes this step, signed. y: reach in scene space, as
+    // a fraction of the height. z, w: unused.
+    drive: vec4<f32>,
+};
+
 struct Sim {
-    // Pointer in scene space, 0 to 1 with y down, and where it was last step.
-    pointer: vec2<f32>,
-    previous: vec2<f32>,
-    // How hard the pointer pushes this step; 0 when it is up.
-    strength: f32,
-    // Pointer radius in scene space, as a fraction of the height.
-    radius: f32,
-    // 0.5 on an 8 bit target, 0 on a float one.
-    bias: f32,
     // Width over height of the scene.
     aspect: f32,
+    // 0.5 on an 8 bit target, 0 on a float one.
+    bias: f32,
+    // How many of `strings` are in use.
+    count: f32,
+    pad: f32,
+    strings: array<StringDrive, 12>,
 };
 
 @group(0) @binding(0) var<uniform> sim: Sim;
@@ -45,13 +51,16 @@ fn load(at: vec2<i32>, limit: vec2<i32>) -> vec4<f32> {
     return textureLoad(state, clamp(at, vec2<i32>(0, 0), limit), 0);
 }
 
-// Distance from p to the segment a-b, in scene space corrected for aspect.
-fn segmentDistance(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
+// How strongly a string pushes at p: strongest under its middle, where a
+// string swings widest, and nothing at its fixed ends or beyond its reach.
+fn stringPush(p: vec2<f32>, line: StringDrive) -> f32 {
     let scale = vec2<f32>(sim.aspect, 1.0);
-    let pa = (p - a) * scale;
-    let ba = (b - a) * scale;
-    let t = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
-    return length(pa - ba * t);
+    let pa = (p - line.ends.xy) * scale;
+    let ba = (line.ends.zw - line.ends.xy) * scale;
+    let along = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+    let distance = length(pa - ba * along);
+    let swing = sin(along * 3.14159265);
+    return smoothstep(line.drive.y, 0.0, distance) * swing * line.drive.x;
 }
 
 @fragment
@@ -72,18 +81,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Wave equation, explicit; 0.25 keeps it inside the stability limit.
     let laplacian = left + right + up + down - 4.0 * height;
-    velocity = (velocity + laplacian * 0.25) * 0.992;
-    height = (height + velocity) * 0.998;
+    velocity = (velocity + laplacian * 0.25) * 0.996;
+    height = (height + velocity) * 0.999;
 
-    // The pointer pushes the surface down along its last stroke.
-    if (sim.strength > 0.0) {
-        let distance = segmentDistance(in.scene, sim.previous, sim.pointer);
-        let push = smoothstep(sim.radius, 0.0, distance) * sim.strength;
-        velocity -= push;
+    let count = i32(sim.count);
+    for (var i = 0; i < 12; i++) {
+        if (i >= count) {
+            break;
+        }
+        velocity += stringPush(in.scene, sim.strings[i]);
     }
 
     // Ink is left where the surface moves, and settles slowly.
-    ink = max(ink * 0.994, min(abs(height) * 1.2, 1.0));
+    ink = max(ink * 0.9975, min(abs(height) * 1.2, 1.0));
 
     // Edges soak the wave up instead of mirroring it.
     let edge = vec2<f32>(min(at, limit - at));
