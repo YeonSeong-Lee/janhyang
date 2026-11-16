@@ -13,7 +13,7 @@ import { Inputs, Note, Pluck } from "./pluck";
 // and a headless capture advances many times before its single draw.
 const MAX_CATCH_UP: f64 = 0.5;
 // How hard a string at full swing pushes the surface each step.
-const PUSH: f64 = 0.07;
+const PUSH: f64 = 0.045;
 // Points to either side of a string its push reaches.
 const REACH: f64 = 10;
 // Times the sound is started before a failing one is left silent.
@@ -82,6 +82,10 @@ export class Main extends Layout {
         }
         this.soundStarts++;
         this.sound = Audio.start(() => new Pluck(), this.inputs);
+        let context = this.context;
+        if (context != null) {
+            context.log("janhyang: sound started, rate " + Audio.processorSampleRate().toString());
+        }
     }
 
     override pointerDown(event: PointerEvent): void {

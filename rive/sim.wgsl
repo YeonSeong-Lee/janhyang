@@ -93,7 +93,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Ink is left where the surface moves, and settles slowly.
-    ink = max(ink * 0.9975, min(abs(height) * 1.2, 1.0));
+    ink = max(ink * 0.9975, min(abs(height) * 0.8, 1.0));
 
     // Edges soak the wave up instead of mirroring it.
     let edge = vec2<f32>(min(at, limit - at));
