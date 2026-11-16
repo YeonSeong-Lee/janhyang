@@ -21,8 +21,8 @@ const MAX_SOUND_STARTS: i32 = 3;
 
 export class Main extends Layout {
     // 1 draws the markers that show which way up the scene arrives and what
-    // the GPU offers. On while stage 1 is being checked in browsers.
-    @input debug: f64 = 1;
+    // the GPU offers. Off by default; set to 1 when checking a new backend.
+    @input debug: f64 = 0;
 
     context: Context? = null;
     medium: Medium = new Medium();
@@ -86,10 +86,6 @@ export class Main extends Layout {
         }
         this.soundStarts++;
         this.sound = Audio.start(() => new Pluck(), this.inputs);
-        let context = this.context;
-        if (context != null) {
-            context.log("janhyang: sound started, rate " + Audio.processorSampleRate().toString());
-        }
     }
 
     override pointerDown(event: PointerEvent): void {

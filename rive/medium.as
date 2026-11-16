@@ -96,9 +96,6 @@ export class Medium {
             this.bias = 0;
             this.featureBits = features.colorBufferFloat ? 2 : 1;
         }
-        context.log("janhyang: gpu known=" + features.known.toString()
-            + " halfFloat=" + features.colorBufferHalfFloat.toString()
-            + " float=" + features.colorBufferFloat.toString());
 
         this.stateSampler = new GPUSampler(
             Filter.linear, Filter.linear, Filter.nearest,
