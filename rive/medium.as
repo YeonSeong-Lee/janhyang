@@ -3,6 +3,7 @@
 import { Context } from "rive/host";
 import { Renderer } from "rive/renderer";
 import { Buffer } from "rive/buffer";
+import { Mat2D } from "rive/mat2d";
 import { BlendMode } from "rive/paint";
 import { ImageSampler, ImageWrap, ImageFilter } from "rive/image";
 import {
@@ -287,6 +288,14 @@ export class Medium {
         pass.draw(3);
         pass.finish();
 
+        // The canvas is sized in device pixels, the scene in layout points:
+        // on a 2x or 3x screen the image must be drawn that much smaller, or
+        // the surface lands at twice or three times where the strings are.
+        renderer.save();
+        renderer.transform(Mat2D.withScale(
+            <f32>(this.width / <f64>canvas.width),
+            <f32>(this.height / <f64>canvas.height)));
         renderer.drawImage(canvas.image, this.imageSampler, BlendMode.srcOver, 1);
+        renderer.restore();
     }
 }
