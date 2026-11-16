@@ -8,11 +8,11 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
-  "dependencies": {
-    "@rive-app/webgl2": "2.50.0"
-  },
   "devDependencies": {
     "typescript": "^7.0.2",
     "vite": "^8.3.8"
+  },
+  "dependencies": {
+    "@rive-app/webgl2-threads": "2.50.0"
   }
 }

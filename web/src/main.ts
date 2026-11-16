@@ -1,4 +1,4 @@
-import { EventType, Fit, Layout, Rive } from "@rive-app/webgl2";
+import { EventType, Fit, Layout, Rive } from "@rive-app/webgl2-threads";
 
 // The page is only a frame for the canvas. Everything seen and heard is in
 // the .riv file.
@@ -32,6 +32,9 @@ const rive = new Rive({
     note(`animations: ${JSON.stringify(rive.animationNames)}`);
     note(`playing: ${JSON.stringify(rive.playingStateMachineNames)} ${rive.isPlaying}`);
     note(`canvas: ${canvas.width}x${canvas.height} @${window.devicePixelRatio}x`);
+    // The file's own sound needs threads, which a browser allows only on a
+    // page served with cross origin isolation.
+    note(`isolated: ${window.crossOriginIsolated}`);
   },
   onLoadError: (event) => note(`load error: ${JSON.stringify(event.data)}`),
 });

@@ -16,11 +16,13 @@ const MAX_CATCH_UP: f64 = 0.5;
 const PUSH: f64 = 0.07;
 // Points to either side of a string its push reaches.
 const REACH: f64 = 10;
+// Times the sound is started before a failing one is left silent.
+const MAX_SOUND_STARTS: i32 = 3;
 
 export class Main extends Layout {
     // 1 draws the markers that show which way up the scene arrives and what
-    // the GPU offers.
-    @input debug: f64 = 0;
+    // the GPU offers. On while stage 1 is being checked in browsers.
+    @input debug: f64 = 1;
 
     context: Context? = null;
     medium: Medium = new Medium();
@@ -29,7 +31,7 @@ export class Main extends Layout {
     inputs: Inputs = new Inputs();
     note: Note = new Note();
     sound: AudioHandle? = null;
-    soundFailed: bool = false;
+    soundStarts: i32 = 0;
 
     width: f64 = 0;
     height: f64 = 0;
@@ -40,10 +42,6 @@ export class Main extends Layout {
         this.context = context;
         if (!this.medium.setup(context)) {
             return false;
-        }
-        // init runs twice; the sound starts once.
-        if (this.sound == null) {
-            this.sound = Audio.start(() => new Pluck(), this.inputs);
         }
         return true;
     }
@@ -59,21 +57,35 @@ export class Main extends Layout {
         this.strings.advance(seconds);
         this.pending = Math.min(this.pending + seconds, MAX_CATCH_UP);
 
-        let sound = this.sound;
-        if (sound != null && !this.soundFailed) {
-            let failed = sound.failed;
-            if (failed != null) {
-                this.soundFailed = true;
-                let context = this.context;
-                if (context != null) {
-                    context.log("janhyang: sound stopped: " + failed);
-                }
-            }
-        }
         return true;
     }
 
+    // Starts the sound, or starts it again after it failed. It waits for a
+    // press because a browser gives a page no sound before one, and gives
+    // up after a few tries so a lasting fault is not retried for ever.
+    private wakeSound(): void {
+        let sound = this.sound;
+        if (sound != null) {
+            let failed = sound.failed;
+            if (failed == null) {
+                return;
+            }
+            let context = this.context;
+            if (context != null) {
+                context.log("janhyang: sound stopped: " + failed);
+            }
+            sound.release();
+            this.sound = null;
+        }
+        if (this.soundStarts >= MAX_SOUND_STARTS) {
+            return;
+        }
+        this.soundStarts++;
+        this.sound = Audio.start(() => new Pluck(), this.inputs);
+    }
+
     override pointerDown(event: PointerEvent): void {
+        this.wakeSound();
         this.pointerIsDown = true;
         this.strings.press(<f64>event.position.x, <f64>event.position.y);
         event.hit();

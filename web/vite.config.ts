@@ -1,7 +1,16 @@
 import { defineConfig } from "vite";
 
+// The file makes its own sound on an audio thread, and a browser shares
+// memory with threads only on a page served with these two headers.
+const isolation = {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+};
+
 export default defineConfig({
   // Relative, so the same build works at a domain root and under a
   // GitHub Pages project path.
   base: "./",
+  server: { headers: isolation },
+  preview: { headers: isolation },
 });
