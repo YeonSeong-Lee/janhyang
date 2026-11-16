@@ -198,9 +198,10 @@ export class Medium {
     }
 
     /// Records one string for the next `step`: its ends in layout points,
-    /// how hard it pushes, the radius of its push in points, and where along
-    /// it, 0 to 1, it was plucked, which is where its ripples start.
-    setString(index: i32, ax: f64, ay: f64, bx: f64, by: f64, drive: f64, reach: f64, pluckedAt: f64): void {
+    /// how hard it pushes, how far to either side its push reaches in
+    /// points, where along it, 0 to 1, it was plucked, and how far in points
+    /// the swing has spread along it from there.
+    setString(index: i32, ax: f64, ay: f64, bx: f64, by: f64, drive: f64, reach: f64, pluckedAt: f64, spread: f64): void {
         if (index < 0 || index >= MAX_STRINGS || this.width <= 0 || this.height <= 0) {
             return;
         }
@@ -213,6 +214,7 @@ export class Medium {
         Buffer.writef32(bytes, at + 16, drive);
         Buffer.writef32(bytes, at + 20, reach / this.height);
         Buffer.writef32(bytes, at + 24, pluckedAt);
+        Buffer.writef32(bytes, at + 28, spread / this.height);
     }
 
     /// Advances the surface one STEP under the first `count` recorded

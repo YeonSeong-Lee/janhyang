@@ -13,9 +13,12 @@ import { Inputs, Note, Pluck } from "./pluck";
 // and a headless capture advances many times before its single draw.
 const MAX_CATCH_UP: f64 = 0.5;
 // How hard a string at full swing pushes the surface each step.
-const PUSH: f64 = 0.16;
-// Radius in points of the push around the point a string was plucked.
-const REACH: f64 = 16;
+const PUSH: f64 = 0.09;
+// Points to either side of a string its push reaches.
+const REACH: f64 = 10;
+// Points a second the swing spreads along a string from where it was
+// plucked, so the ripples start at the plucked point.
+const SPREAD_SPEED: f64 = 1500;
 // Times the sound is started before a failing one is left silent.
 const MAX_SOUND_STARTS: i32 = 3;
 
@@ -139,7 +142,8 @@ export class Main extends Layout {
                     continue;
                 }
                 medium.setString(count, line.ax, line.ay, line.bx, line.by,
-                    line.pushAt(ahead) * PUSH, REACH, line.pluckedAt);
+                    line.pushAt(ahead) * PUSH, REACH, line.pluckedAt,
+                    Math.max(line.age + ahead, 0) * SPREAD_SPEED + REACH);
                 count++;
             }
             medium.step(count);
