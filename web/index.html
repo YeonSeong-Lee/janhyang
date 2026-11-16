@@ -21,6 +21,22 @@
   <body>
     <canvas id="stage"></canvas>
     <pre id="report" hidden></pre>
+    <script>
+      // Without isolation headers from the server, install the worker that
+      // adds them and load once more under it. Reload only once, so a
+      // browser that refuses service workers still gets the page.
+      if (!window.crossOriginIsolated && "serviceWorker" in navigator
+          && !sessionStorage.getItem("coi-reloaded")) {
+        navigator.serviceWorker.register("./coi.js").then((registration) => {
+          const reload = () => {
+            try { sessionStorage.setItem("coi-reloaded", "1"); } catch {}
+            location.reload();
+          };
+          if (registration.active && !navigator.serviceWorker.controller) reload();
+          else navigator.serviceWorker.addEventListener("controllerchange", reload);
+        });
+      }
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
