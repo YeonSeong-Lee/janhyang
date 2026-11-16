@@ -16,9 +16,8 @@ concurrency:
 
 jobs:
   deploy:
-    # The signed .riv is built and committed by hand (it needs a Rive login),
-    # so the page deploys only once one is there.
-    if: hashFiles('web/public/janhyang.riv') != ''
+    # web/public/janhyang.riv is the signed build, made and committed by hand
+    # because signing needs a Rive login.
     runs-on: ubuntu-latest
     environment:
       name: github-pages
