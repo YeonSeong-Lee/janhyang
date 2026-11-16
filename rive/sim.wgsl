@@ -13,11 +13,12 @@
 struct StringDrive {
     // Its two ends in scene space, 0 to 1 with y down: a.xy then b.xy.
     ends: vec4<f32>,
-    // x: how hard it pushes this step, signed. y: how far to either side of
-    // the string the push reaches. z: where along the string, 0 to 1, it was
-    // plucked. w: how far along the string from there the swing has spread
-    // so far. y and w are in scene space, as fractions of the height.
+    // x: how hard its motion pushes the surface. y: how far to either side
+    // of it the push reaches, in scene space as a fraction of the height.
     drive: vec4<f32>,
+    // How fast it moves at 16 points along it, ends included, as a fraction
+    // of the speed of a full pull's main swing; four to a vec4.
+    speeds: array<vec4<f32>, 4>,
 };
 
 struct Sim {
@@ -53,22 +54,35 @@ fn load(at: vec2<i32>, limit: vec2<i32>) -> vec4<f32> {
     return textureLoad(state, clamp(at, vec2<i32>(0, 0), limit), 0);
 }
 
-// How strongly a string pushes at p. The push lies along the string, as
-// a band, shaped as a plucked string swings: highest where it was plucked
-// and nothing at its fixed ends. It begins at the plucked point, where the
-// sound comes from, and spreads along the string toward both ends.
+fn sampleAt(values: array<vec4<f32>, 4>, index: i32) -> f32 {
+    let i = clamp(index, 0, 15);
+    return values[i / 4][i % 4];
+}
+
+// Reads one of a string's sampled values at `along`, 0 to 1, between the
+// two samples either side.
+fn sampled(values: array<vec4<f32>, 4>, along: f32) -> f32 {
+    let f = along * 15.0;
+    let i = i32(floor(f));
+    return mix(sampleAt(values, i), sampleAt(values, i + 1), f - f32(i));
+}
+
+// How strongly a string pushes at p. The water along the string's rest
+// line is pushed as hard as the string above it is moving there, so the
+// waves follow the string's own motion: they start where it was plucked,
+// and the two corners the pluck leaves carry them out to both ends.
 fn stringPush(p: vec2<f32>, line: StringDrive) -> f32 {
     let scale = vec2<f32>(sim.aspect, 1.0);
     let pa = (p - line.ends.xy) * scale;
     let ba = (line.ends.zw - line.ends.xy) * scale;
-    let length2 = max(dot(ba, ba), 1e-6);
-    let along = clamp(dot(pa, ba) / length2, 0.0, 1.0);
-    let distance = length(pa - ba * along);
-    let plucked = clamp(line.drive.z, 0.02, 0.98);
-    let shape = select((1.0 - along) / (1.0 - plucked), along / plucked, along < plucked);
-    let fromPluck = abs(along - plucked) * sqrt(length2);
-    let reached = smoothstep(line.drive.w, line.drive.w * 0.7, fromPluck);
-    return smoothstep(line.drive.y, 0.0, distance) * shape * reached * line.drive.x;
+    let size = max(length(ba), 1e-4);
+    let along = dot(pa, ba) / (size * size);
+    if (along < 0.0 || along > 1.0) {
+        return 0.0;
+    }
+    let distance = abs(dot(pa, vec2<f32>(-ba.y, ba.x) / size));
+    let speed = sampled(line.speeds, along);
+    return smoothstep(line.drive.y, 0.0, distance) * speed * line.drive.x;
 }
 
 @fragment

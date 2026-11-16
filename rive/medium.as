@@ -11,6 +11,7 @@ import {
     GPUPipeline, GPUPipelineDesc, GPUSampler, GPUShaderModule, GPUTexture,
     GPUTextureDesc, GPUTextureView,
 } from "rive/gpu";
+import { SAMPLES } from "./strings";
 import {
     BufferUsage, Filter, LoadOp, StoreOp, TextureFormat, WrapMode,
 } from "rive/gpu_enums";
@@ -26,8 +27,9 @@ export const STEP: f64 = 1.0 / 240.0;
 
 const SIM_HEIGHT: u32 = 360;
 const HEADER_BYTES: i32 = 16;
-const STRING_BYTES: i32 = 32;
-const SIM_BYTES: u32 = 400;
+// Per string: ends, drive, then SAMPLES speeds.
+const STRING_BYTES: i32 = 32 + 4 * SAMPLES;
+const SIM_BYTES: u32 = <u32>(HEADER_BYTES + STRING_BYTES * MAX_STRINGS);
 const SHOW_BYTES: u32 = 32;
 
 export class Medium {
@@ -198,10 +200,10 @@ export class Medium {
     }
 
     /// Records one string for the next `step`: its ends in layout points,
-    /// how hard it pushes, how far to either side its push reaches in
-    /// points, where along it, 0 to 1, it was plucked, and how far in points
-    /// the swing has spread along it from there.
-    setString(index: i32, ax: f64, ay: f64, bx: f64, by: f64, drive: f64, reach: f64, pluckedAt: f64, spread: f64): void {
+    /// how hard it pushes, how far to either side of it the push reaches in
+    /// points, and how fast it moves at SAMPLES points along it.
+    setString(index: i32, ax: f64, ay: f64, bx: f64, by: f64, drive: f64, reach: f64,
+              speeds: StaticArray<f32>): void {
         if (index < 0 || index >= MAX_STRINGS || this.width <= 0 || this.height <= 0) {
             return;
         }
@@ -213,8 +215,9 @@ export class Medium {
         Buffer.writef32(bytes, at + 12, by / this.height);
         Buffer.writef32(bytes, at + 16, drive);
         Buffer.writef32(bytes, at + 20, reach / this.height);
-        Buffer.writef32(bytes, at + 24, pluckedAt);
-        Buffer.writef32(bytes, at + 28, spread / this.height);
+        for (let i = 0; i < SAMPLES; i++) {
+            Buffer.writef32(bytes, at + 32 + i * 4, <f64>speeds[i]);
+        }
     }
 
     /// Advances the surface one STEP under the first `count` recorded

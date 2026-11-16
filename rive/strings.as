@@ -17,8 +17,16 @@ const SHORTEST: f64 = 40;
 const PULL_LIMIT: f64 = 0.22;
 // Seconds a string let go takes to fade away.
 const LET_GO: f64 = 0.9;
-// Overtones the swing of a string is built from.
-const MODES: i32 = 5;
+// Overtones the swing of a string is built from. Enough of them keep the
+// corner a pluck leaves sharp, so it can be seen splitting in two and
+// running to the ends and back, as on a real string.
+const MODES: i32 = 16;
+/// Points along a string at which its motion is handed to the surface,
+/// ends included.
+export const SAMPLES: i32 = 16;
+// The fastest a part of a string is let push, as a multiple of the speed
+// of a full pull's main swing.
+const SPEED_CAP: f64 = 0.8;
 // Straight pieces a string is drawn with.
 const PIECES: i32 = 40;
 
@@ -92,32 +100,52 @@ export class StringLine {
     }
 
     /// How far the string stands from rest at `along`, 0 to 1, in points to
-    /// one side: the shape a string plucked at `pluckedAt` rings with, its
-    /// overtones each swinging at their own rate and dying sooner the higher
-    /// they are.
+    /// one side, `seconds` after it was let go. It is the motion of a string
+    /// let go from the bent shape it was held in: each overtone swings at
+    /// its own rate, and the higher ones die sooner, which rounds the
+    /// running corners off as the note fades.
+    swingAtTime(along: f64, seconds: f64): f64 {
+        let p = Math.min(Math.max(this.pluckedAt, 0.02), 0.98);
+        let total: f64 = 0;
+        for (let n = 1; n <= MODES; n++) {
+            let nf = <f64>n;
+            // The share of each overtone in a string bent to a corner at p.
+            let weight = 2 * Math.sin(nf * Math.PI * p) / (nf * nf * Math.PI * Math.PI * p * (1 - p));
+            total += weight * Math.sin(nf * Math.PI * along)
+                * Math.cos(2 * Math.PI * nf * this.rate * seconds)
+                * Math.exp(-seconds * 0.4 * (nf - 1));
+        }
+        return this.amplitude * this.fade(seconds) * total;
+    }
+
+    /// How far the string stands from rest at `along` now.
     swingAt(along: f64): f64 {
         if (!this.ringing) {
             return 0;
         }
-        let total: f64 = 0;
-        for (let n = 1; n <= MODES; n++) {
-            let weight = Math.sin(n * Math.PI * this.pluckedAt) / <f64>(n * n);
-            total += weight * Math.sin(n * Math.PI * along)
-                * Math.cos(2 * Math.PI * n * this.rate * this.age)
-                * Math.exp(-this.age * 0.4 * (n - 1));
-        }
-        return this.amplitude * this.fade(this.age) * total * 1.1;
+        return this.swingAtTime(along, this.age);
     }
 
-    /// How hard the string pushes the surface under it, `ahead` seconds
-    /// from now: the speed of its main swing, as a fraction of its limit.
-    pushAt(ahead: f64): f64 {
-        if (!this.ringing) {
-            return 0;
+    /// Writes how fast the string is moving at SAMPLES points along it,
+    /// ends included, `ahead` seconds from now, as a fraction of the speed
+    /// of a full pull's main swing.
+    sample(speeds: StaticArray<f32>, ahead: f64): void {
+        let t = Math.max(this.age + ahead, 0);
+        let h: f64 = 0.0015;
+        let before = Math.max(t - h, 0);
+        let fastest = this.length * PULL_LIMIT * 2 * Math.PI * this.rate;
+        for (let i = 0; i < SAMPLES; i++) {
+            if (!this.ringing) {
+                speeds[i] = 0;
+                continue;
+            }
+            let along = <f64>i / <f64>(SAMPLES - 1);
+            let speed = (this.swingAtTime(along, t + h) - this.swingAtTime(along, before)) / (t + h - before);
+            // A corner moves very fast as it runs; capped, it pushes the
+            // water no harder than the rest of the swing.
+            let relative = Math.min(Math.max(speed / fastest, -SPEED_CAP), SPEED_CAP);
+            speeds[i] = <f32>(relative * this.presence);
         }
-        let at = Math.max(this.age + ahead, 0);
-        let strength = this.amplitude / (this.length * PULL_LIMIT);
-        return -strength * this.fade(at) * Math.sin(2 * Math.PI * this.rate * at) * this.presence;
     }
 
     /// True while the swing is still large enough to matter.

@@ -6,19 +6,16 @@ import { Renderer } from "rive/renderer";
 import { PointerEvent } from "rive/events";
 import { Audio, AudioHandle } from "rive/audio";
 import { Medium, MAX_STRINGS, STEP } from "./medium";
-import { Strings } from "./strings";
+import { Strings, SAMPLES } from "./strings";
 import { Inputs, Note, Pluck } from "./pluck";
 
 // The most time one draw catches the surface up on. A frame can come late,
 // and a headless capture advances many times before its single draw.
 const MAX_CATCH_UP: f64 = 0.5;
 // How hard a string at full swing pushes the surface each step.
-const PUSH: f64 = 0.09;
+const PUSH: f64 = 0.05;
 // Points to either side of a string its push reaches.
 const REACH: f64 = 10;
-// Points a second the swing spreads along a string from where it was
-// plucked, so the ripples start at the plucked point.
-const SPREAD_SPEED: f64 = 1500;
 // Times the sound is started before a failing one is left silent.
 const MAX_SOUND_STARTS: i32 = 3;
 
@@ -40,6 +37,8 @@ export class Main extends Layout {
     height: f64 = 0;
     pending: f64 = 0;
     pointerIsDown: bool = false;
+    // Scratch for one string's motion, handed to the surface each step.
+    speeds: StaticArray<f32> = new StaticArray<f32>(SAMPLES);
 
     override init(context: Context): bool {
         this.context = context;
@@ -141,9 +140,9 @@ export class Main extends Layout {
                 if (!line.ringing) {
                     continue;
                 }
+                line.sample(this.speeds, ahead);
                 medium.setString(count, line.ax, line.ay, line.bx, line.by,
-                    line.pushAt(ahead) * PUSH, REACH, line.pluckedAt,
-                    Math.max(line.age + ahead, 0) * SPREAD_SPEED + REACH);
+                    PUSH, REACH, this.speeds);
                 count++;
             }
             medium.step(count);
