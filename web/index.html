@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <title>잔향</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #05070b; overflow: hidden; }
+      #stage { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+      #report {
+        position: fixed; left: 12px; bottom: 12px; margin: 0; padding: 8px 10px;
+        max-width: calc(100vw - 24px); box-sizing: border-box;
+        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: #c9d4e3; background: rgb(5 7 11 / 0.8); border: 1px solid #1c2531;
+        border-radius: 6px; white-space: pre-wrap; pointer-events: none;
+      }
+      #report[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+    <pre id="report" hidden></pre>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
