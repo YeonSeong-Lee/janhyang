@@ -16,9 +16,11 @@ struct StringDrive {
     // x: how hard its motion pushes the surface. y: how far to either side
     // of it the push reaches, in scene space as a fraction of the height.
     drive: vec4<f32>,
-    // How fast it moves at 16 points along it, ends included, as a fraction
-    // of the speed of a full pull's main swing; four to a vec4.
-    speeds: array<vec4<f32>, 4>,
+    // At 32 points along it, ends included, four to a vec4: how far it
+    // stands aside from its rest line, toward the left of a to b, in scene
+    // space as a fraction of the height, now and one step before.
+    offsets: array<vec4<f32>, 8>,
+    previous: array<vec4<f32>, 8>,
 };
 
 struct Sim {
@@ -54,23 +56,26 @@ fn load(at: vec2<i32>, limit: vec2<i32>) -> vec4<f32> {
     return textureLoad(state, clamp(at, vec2<i32>(0, 0), limit), 0);
 }
 
-fn sampleAt(values: array<vec4<f32>, 4>, index: i32) -> f32 {
-    let i = clamp(index, 0, 15);
+fn sampleAt(values: array<vec4<f32>, 8>, index: i32) -> f32 {
+    let i = clamp(index, 0, 31);
     return values[i / 4][i % 4];
 }
 
 // Reads one of a string's sampled values at `along`, 0 to 1, between the
 // two samples either side.
-fn sampled(values: array<vec4<f32>, 4>, along: f32) -> f32 {
-    let f = along * 15.0;
+fn sampled(values: array<vec4<f32>, 8>, along: f32) -> f32 {
+    let f = along * 31.0;
     let i = i32(floor(f));
     return mix(sampleAt(values, i), sampleAt(values, i + 1), f - f32(i));
 }
 
-// How strongly a string pushes at p. The water along the string's rest
-// line is pushed as hard as the string above it is moving there, so the
-// waves follow the string's own motion: they start where it was plucked,
-// and the two corners the pluck leaves carry them out to both ends.
+// How hard a string pushes the water at p this step. The string sweeps
+// through the water where it really is, not along its rest line: every
+// point it passed over since the last step is pushed the way it went. A
+// fast string crosses many texels in one step, and sweeping, rather than
+// pushing where it ends up, leaves no gaps behind it. So the waves leave
+// from wherever the string is, and the two corners a pluck leaves carry
+// them along it as they run to the ends and back.
 fn stringPush(p: vec2<f32>, line: StringDrive) -> f32 {
     let scale = vec2<f32>(sim.aspect, 1.0);
     let pa = (p - line.ends.xy) * scale;
@@ -80,9 +85,19 @@ fn stringPush(p: vec2<f32>, line: StringDrive) -> f32 {
     if (along < 0.0 || along > 1.0) {
         return 0.0;
     }
-    let distance = abs(dot(pa, vec2<f32>(-ba.y, ba.x) / size));
-    let speed = sampled(line.speeds, along);
-    return smoothstep(line.drive.y, 0.0, distance) * speed * line.drive.x;
+    let across = dot(pa, vec2<f32>(-ba.y, ba.x) / size);
+    let now = sampled(line.offsets, along);
+    let before = sampled(line.previous, along);
+    let moved = now - before;
+    let reach = line.drive.y;
+    // Inside the band it swept, softened by `reach` at both edges.
+    let low = min(now, before);
+    let high = max(now, before);
+    let inside = smoothstep(low - reach, low, across) * (1.0 - smoothstep(high, high + reach, across));
+    // A slow string pushes gently; one that crosses its own reach in a step
+    // or more pushes all it can.
+    let strength = min(abs(moved) / reach, 1.0);
+    return inside * strength * sign(moved) * line.drive.x;
 }
 
 @fragment

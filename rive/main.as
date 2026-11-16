@@ -15,7 +15,7 @@ const MAX_CATCH_UP: f64 = 0.5;
 // How hard a string at full swing pushes the surface each step.
 const PUSH: f64 = 0.05;
 // Points to either side of a string its push reaches.
-const REACH: f64 = 10;
+const REACH: f64 = 12;
 // Times the sound is started before a failing one is left silent.
 const MAX_SOUND_STARTS: i32 = 3;
 
@@ -37,8 +37,10 @@ export class Main extends Layout {
     height: f64 = 0;
     pending: f64 = 0;
     pointerIsDown: bool = false;
-    // Scratch for one string's motion, handed to the surface each step.
-    speeds: StaticArray<f32> = new StaticArray<f32>(SAMPLES);
+    // Scratch for one string's shape and motion, handed to the surface
+    // each step.
+    offsets: StaticArray<f32> = new StaticArray<f32>(SAMPLES);
+    previous: StaticArray<f32> = new StaticArray<f32>(SAMPLES);
 
     override init(context: Context): bool {
         this.context = context;
@@ -132,17 +134,18 @@ export class Main extends Layout {
         let steps = <i32>Math.floor(this.pending / STEP);
         this.pending -= steps * STEP;
         for (let i = 0; i < steps; i++) {
-            // Each step sees the strings as they were at its own moment.
-            let ahead = -<f64>(steps - 1 - i) * STEP;
+            // The strings and the surface move on together, a step at a time,
+            // so the water answers each string where it is at that moment.
+            this.strings.step();
             let count = 0;
             for (let s = 0; s < lines.length && count < MAX_STRINGS; s++) {
                 let line = lines[s];
-                if (!line.ringing) {
+                if (!line.awake) {
                     continue;
                 }
-                line.sample(this.speeds, ahead);
+                line.sample(this.offsets, this.previous);
                 medium.setString(count, line.ax, line.ay, line.bx, line.by,
-                    PUSH, REACH, this.speeds);
+                    PUSH * line.presence, REACH, this.offsets, this.previous);
                 count++;
             }
             medium.step(count);

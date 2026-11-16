@@ -12,7 +12,7 @@ import {
     GPUPipeline, GPUPipelineDesc, GPUSampler, GPUShaderModule, GPUTexture,
     GPUTextureDesc, GPUTextureView,
 } from "rive/gpu";
-import { SAMPLES } from "./strings";
+import { SAMPLES, STRING_STEP } from "./strings";
 import {
     BufferUsage, Filter, LoadOp, StoreOp, TextureFormat, WrapMode,
 } from "rive/gpu_enums";
@@ -21,15 +21,16 @@ import {
 /// number.
 export const MAX_STRINGS: i32 = 12;
 
-/// Seconds one step of the surface covers. The simulation runs at a fixed
-/// height and step, whatever the screen: a browser can hand over a frame of
-/// nearly a second or run at 120 Hz, and the wave must behave the same.
-export const STEP: f64 = 1.0 / 240.0;
+/// Seconds one step of the surface covers, the same as a step of the
+/// strings. The simulation runs at a fixed height and step, whatever the
+/// screen: a browser can hand over a frame of nearly a second or run at
+/// 120 Hz, and the wave must behave the same.
+export const STEP: f64 = STRING_STEP;
 
 const SIM_HEIGHT: u32 = 360;
 const HEADER_BYTES: i32 = 16;
-// Per string: ends, drive, then SAMPLES speeds.
-const STRING_BYTES: i32 = 32 + 4 * SAMPLES;
+// Per string: ends, drive, then SAMPLES offsets now and a step before.
+const STRING_BYTES: i32 = 32 + 8 * SAMPLES;
 const SIM_BYTES: u32 = <u32>(HEADER_BYTES + STRING_BYTES * MAX_STRINGS);
 const SHOW_BYTES: u32 = 32;
 
@@ -202,9 +203,10 @@ export class Medium {
 
     /// Records one string for the next `step`: its ends in layout points,
     /// how hard it pushes, how far to either side of it the push reaches in
-    /// points, and how fast it moves at SAMPLES points along it.
+    /// points, and at SAMPLES points along it how far it stands aside now
+    /// and stood aside a step before, in points.
     setString(index: i32, ax: f64, ay: f64, bx: f64, by: f64, drive: f64, reach: f64,
-              speeds: StaticArray<f32>): void {
+              offsets: StaticArray<f32>, previous: StaticArray<f32>): void {
         if (index < 0 || index >= MAX_STRINGS || this.width <= 0 || this.height <= 0) {
             return;
         }
@@ -217,7 +219,8 @@ export class Medium {
         Buffer.writef32(bytes, at + 16, drive);
         Buffer.writef32(bytes, at + 20, reach / this.height);
         for (let i = 0; i < SAMPLES; i++) {
-            Buffer.writef32(bytes, at + 32 + i * 4, <f64>speeds[i]);
+            Buffer.writef32(bytes, at + 32 + i * 4, <f64>offsets[i] / this.height);
+            Buffer.writef32(bytes, at + 32 + (SAMPLES + i) * 4, <f64>previous[i] / this.height);
         }
     }
 

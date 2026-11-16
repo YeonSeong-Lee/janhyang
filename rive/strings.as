@@ -17,18 +17,28 @@ const SHORTEST: f64 = 40;
 const PULL_LIMIT: f64 = 0.22;
 // Seconds a string let go takes to fade away.
 const LET_GO: f64 = 0.9;
-// Overtones the swing of a string is built from. Enough of them keep the
-// corner a pluck leaves sharp, so it can be seen splitting in two and
-// running to the ends and back, as on a real string.
-const MODES: i32 = 16;
-/// Points along a string at which its motion is handed to the surface,
-/// ends included.
-export const SAMPLES: i32 = 16;
-// The fastest a part of a string is let push, as a multiple of the speed
-// of a full pull's main swing.
-const SPEED_CAP: f64 = 0.8;
-// Straight pieces a string is drawn with.
-const PIECES: i32 = 40;
+/// Points along a string at which its shape and motion are handed to the
+/// surface, ends included. sim.wgsl holds the same number.
+export const SAMPLES: i32 = 32;
+// About how many pieces a string is simulated and drawn with.
+const PIECES: f64 = 48;
+// How far a wave runs in one step of a string's own, in pieces. Just under 1
+// keeps a running corner nearly as sharp as on a real string; exactly 1
+// would let every other point drift apart into a fine zigzag.
+const COURANT: f64 = 0.95;
+/// Seconds one step of a string's motion covers; the surface steps the same.
+export const STRING_STEP: f64 = 1.0 / 240.0;
+// How quickly a held point follows the finger, per second. A finger is soft:
+// a jump of the pointer pulls the string over a few hundredths of a second.
+const FINGER: f64 = 45;
+// Losses. The whole string loses its swing to the air at a rate that grows
+// with how fast it swings; the sharp detail of its shape is lost sooner,
+// which rounds a running corner off as the note fades.
+const AIR: f64 = 0.5;
+const AIR_PER_SWING: f64 = 0.05;
+const STIFFNESS_LOSS: f64 = 0.02;
+// Below this, in points, a string let go is taken as still.
+const STILL: f64 = 0.05;
 
 // The scale the strings are tuned to: A minor pentatonic, in semitones
 // above A.
@@ -56,6 +66,11 @@ export function pitchOf(length: f64, height: f64): f64 {
     return Math.min(Math.max(frequency, 65), 1320);
 }
 
+/// A string: a line of points held at both ends, each pulled toward its
+/// neighbours by the string's tension. Its motion is worked out step by
+/// step from that pull (the wave equation), so whatever is done to it - a
+/// pull, a pluck, a finger laid on it while it rings - it answers as a real
+/// string would.
 export class StringLine {
     ax: f64 = 0;
     ay: f64 = 0;
@@ -67,14 +82,30 @@ export class StringLine {
     /// Swings a second it is seen to make, far slower than it sounds.
     rate: f64 = 8;
 
-    /// How far its plucked point stood from rest when let go, in points,
-    /// signed to one side.
-    amplitude: f64 = 0;
-    /// Where along it, 0 to 1, it was plucked.
-    pluckedAt: f64 = 0.5;
-    /// Seconds since it was let go.
-    age: f64 = 0;
-    ringing: bool = false;
+    /// Pieces it is simulated with, and steps of its own each STRING_STEP
+    /// is split into; a wave runs just under one piece per step.
+    pieces: i32 = 48;
+    substeps: i32 = 2;
+    /// How far each point stands from rest, in points to one side, now and
+    /// one step of its own before.
+    now: StaticArray<f64>;
+    before: StaticArray<f64>;
+    // Scratch for the next step.
+    next: StaticArray<f64>;
+    // Loss per step of its own, as the fraction of the swing kept.
+    keep: f64 = 1;
+    // How strongly a point is drawn toward its neighbours each step of its
+    // own: the square of how many pieces a wave runs a step.
+    pull: f64 = 0.9;
+
+    /// True while it moves or is held; a still string is not stepped.
+    awake: bool = false;
+    /// The point a finger holds, or -1, and where the finger is.
+    heldPoint: i32 = -1;
+    fingerTarget: f64 = 0;
+    finger: f64 = 0;
+    /// Steps taken while held; none means the pull was never seen moving.
+    stepsHeld: i32 = 0;
 
     /// 1 while kept, falling to 0 once it is let go for good.
     presence: f64 = 1;
@@ -92,65 +123,151 @@ export class StringLine {
         this.length = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
         this.frequency = pitchOf(this.length, height);
         this.rate = 5 + 2.4 * Math.log2(this.frequency / 65);
+        // A wave crosses the string and back once per swing. Pick whole
+        // steps per STRING_STEP, then the piece count that makes the wave run
+        // just under COURANT pieces a step.
+        let substeps = <i32>Math.max(1, Math.ceil(2 * PIECES * this.rate * STRING_STEP / COURANT));
+        let pieces = <i32>Math.max(24, Math.floor(COURANT * <f64>substeps / (2 * this.rate * STRING_STEP)));
+        this.substeps = substeps;
+        this.pieces = pieces;
+        let courant = 2 * <f64>pieces * this.rate * STRING_STEP / <f64>substeps;
+        this.pull = courant * courant;
+        this.now = new StaticArray<f64>(pieces + 1);
+        this.before = new StaticArray<f64>(pieces + 1);
+        this.next = new StaticArray<f64>(pieces + 1);
+        let dt = STRING_STEP / <f64>substeps;
+        // The scheme below loses (1 - keep) / 2 of the swing a step each way,
+        // so the swing fades at AIR + rate * AIR_PER_SWING per second.
+        this.keep = Math.exp(-2 * dt * (AIR + this.rate * AIR_PER_SWING));
     }
 
-    // How much the swing has died down `seconds` after the pluck.
-    private fade(seconds: f64): f64 {
-        return Math.exp(-seconds * (0.5 + this.rate * 0.05));
-    }
+    // Where it stood at SAMPLES points along it when last handed to the
+    // surface, a STRING_STEP ago.
+    sampled: StaticArray<f64> = new StaticArray<f64>(SAMPLES);
 
-    /// How far the string stands from rest at `along`, 0 to 1, in points to
-    /// one side, `seconds` after it was let go. It is the motion of a string
-    /// let go from the bent shape it was held in: each overtone swings at
-    /// its own rate, and the higher ones die sooner, which rounds the
-    /// running corners off as the note fades.
-    swingAtTime(along: f64, seconds: f64): f64 {
-        let p = Math.min(Math.max(this.pluckedAt, 0.02), 0.98);
-        let total: f64 = 0;
-        for (let n = 1; n <= MODES; n++) {
-            let nf = <f64>n;
-            // The share of each overtone in a string bent to a corner at p.
-            let weight = 2 * Math.sin(nf * Math.PI * p) / (nf * nf * Math.PI * Math.PI * p * (1 - p));
-            total += weight * Math.sin(nf * Math.PI * along)
-                * Math.cos(2 * Math.PI * nf * this.rate * seconds)
-                * Math.exp(-seconds * 0.4 * (nf - 1));
-        }
-        return this.amplitude * this.fade(seconds) * total;
-    }
-
-    /// How far the string stands from rest at `along` now.
+    /// How far the string stands from rest at `along`, 0 to 1, in points.
     swingAt(along: f64): f64 {
-        if (!this.ringing) {
-            return 0;
-        }
-        return this.swingAtTime(along, this.age);
+        let f = Math.min(Math.max(along, 0), 1) * <f64>this.pieces;
+        let i = <i32>Math.min(Math.floor(f), <f64>(this.pieces - 1));
+        let part = f - <f64>i;
+        return this.now[i] + (this.now[i + 1] - this.now[i]) * part;
     }
 
-    /// Writes how fast the string is moving at SAMPLES points along it,
-    /// ends included, `ahead` seconds from now, as a fraction of the speed
-    /// of a full pull's main swing.
-    sample(speeds: StaticArray<f32>, ahead: f64): void {
-        let t = Math.max(this.age + ahead, 0);
-        let h: f64 = 0.0015;
-        let before = Math.max(t - h, 0);
-        let fastest = this.length * PULL_LIMIT * 2 * Math.PI * this.rate;
-        for (let i = 0; i < SAMPLES; i++) {
-            if (!this.ringing) {
-                speeds[i] = 0;
-                continue;
+    /// Lays a finger on the string at `along`, where it stands now.
+    hold(along: f64): void {
+        let point = <i32>Math.round(along * <f64>this.pieces);
+        this.heldPoint = <i32>Math.min(Math.max(point, 1), this.pieces - 1);
+        this.finger = this.now[this.heldPoint];
+        this.fingerTarget = this.finger;
+        this.stepsHeld = 0;
+        if (!this.awake) {
+            for (let i = 0; i < SAMPLES; i++) {
+                this.sampled[i] = 0;
             }
-            let along = <f64>i / <f64>(SAMPLES - 1);
-            let speed = (this.swingAtTime(along, t + h) - this.swingAtTime(along, before)) / (t + h - before);
-            // A corner moves very fast as it runs; capped, it pushes the
-            // water no harder than the rest of the swing.
-            let relative = Math.min(Math.max(speed / fastest, -SPEED_CAP), SPEED_CAP);
-            speeds[i] = <f32>(relative * this.presence);
+        }
+        this.awake = true;
+    }
+
+    /// Where along it, 0 to 1, the finger is.
+    get heldAt(): f64 {
+        return <f64>this.heldPoint / <f64>this.pieces;
+    }
+
+    /// Takes the finger away and lets the string go from where it stands.
+    letGo(): void {
+        if (this.heldPoint < 0) {
+            return;
+        }
+        // Not stepped while held, as when frames come late: it stands as a
+        // held string at rest does, straight from each end to the finger.
+        if (this.stepsHeld == 0) {
+            let p = this.heldPoint;
+            for (let i = 0; i <= this.pieces; i++) {
+                let aside = i <= p
+                    ? this.fingerTarget * <f64>i / <f64>p
+                    : this.fingerTarget * <f64>(this.pieces - i) / <f64>(this.pieces - p);
+                this.now[i] = aside;
+                this.before[i] = aside;
+            }
+        }
+        this.heldPoint = -1;
+    }
+
+    /// Moves the string on by one STRING_STEP.
+    step(): void {
+        if (!this.awake) {
+            return;
+        }
+        let n = this.pieces;
+        let now = this.now;
+        let before = this.before;
+        let next = this.next;
+        let keep = this.keep;
+        let held = this.heldPoint;
+        if (held >= 0) {
+            this.stepsHeld++;
+        }
+        let fingerStart = this.finger;
+        let fingerEnd = fingerStart + (this.fingerTarget - fingerStart) * (1 - Math.exp(-STRING_STEP * FINGER));
+        this.finger = fingerEnd;
+        for (let s = 0; s < this.substeps; s++) {
+            // Tension pulls each point toward its neighbours; it keeps going
+            // as it was going, less what the air takes.
+            let pull = this.pull;
+            let carry = 0.5 * (1 + keep);
+            for (let i = 1; i < n; i++) {
+                let here = now[i];
+                next[i] = (2 * here + pull * (now[i - 1] - 2 * here + now[i + 1])) * carry
+                    - before[i] * keep;
+            }
+            next[0] = 0;
+            next[n] = 0;
+            if (held >= 0) {
+                next[held] = fingerStart + (fingerEnd - fingerStart) * <f64>(s + 1) / <f64>this.substeps;
+            }
+            for (let i = 0; i <= n; i++) {
+                before[i] = now[i];
+                now[i] = next[i];
+            }
+        }
+        // The fine detail of the shape fades sooner than the whole swing.
+        for (let pass = 0; pass < 2; pass++) {
+            let row = pass == 0 ? now : before;
+            let last = row[0];
+            for (let i = 1; i < n; i++) {
+                let here = row[i];
+                if (i != held) {
+                    row[i] = here + STIFFNESS_LOSS * (last - 2 * here + row[i + 1]);
+                }
+                last = here;
+            }
+        }
+        if (held < 0) {
+            let largest: f64 = 0;
+            for (let i = 0; i <= n; i++) {
+                largest = Math.max(largest, Math.max(Math.abs(now[i]), Math.abs(before[i])));
+            }
+            if (largest < STILL) {
+                for (let i = 0; i <= n; i++) {
+                    now[i] = 0;
+                    before[i] = 0;
+                }
+                this.awake = false;
+            }
         }
     }
 
-    /// True while the swing is still large enough to matter.
-    get lively(): bool {
-        return this.ringing && Math.abs(this.amplitude) * this.fade(this.age) > 0.05;
+    /// Writes where the string stands now and where it stood a STRING_STEP
+    /// before, in points to one side, at SAMPLES points along it, ends
+    /// included. Between the two lies the water it swept through.
+    sample(offsets: StaticArray<f32>, previous: StaticArray<f32>): void {
+        for (let i = 0; i < SAMPLES; i++) {
+            let along = <f64>i / <f64>(SAMPLES - 1);
+            let here = this.swingAt(along);
+            offsets[i] = <f32>here;
+            previous[i] = <f32>this.sampled[i];
+            this.sampled[i] = here;
+        }
     }
 }
 
@@ -173,9 +290,8 @@ export class Strings {
     endY: f64 = 0;
     draft: Path = new Path();
 
-    // A string being held aside.
+    // A string being held aside, and how far aside the finger holds it.
     held: StringLine? = null;
-    heldAt: f64 = 0.5;
     heldOffset: f64 = 0;
 
     struck: Struck = new Struck();
@@ -187,7 +303,8 @@ export class Strings {
         this.paint.join = StrokeJoin.round;
     }
 
-    // Takes hold of the nearest string within reach of the point, if any.
+    // Takes hold of the nearest string within reach of the point, if any,
+    // where it stands now: a ringing string is caught mid swing.
     private take(x: f64, y: f64): bool {
         let best: StringLine? = null;
         let bestAlong: f64 = 0;
@@ -197,13 +314,14 @@ export class Strings {
             if (line.leaving) {
                 continue;
             }
-            let dx = line.bx - line.ax;
-            let dy = line.by - line.ay;
-            let along = ((x - line.ax) * dx + (y - line.ay) * dy) / (line.length * line.length);
-            along = Math.min(Math.max(along, 0.06), 0.94);
-            let px = line.ax + dx * along;
-            let py = line.ay + dy * along;
-            let distance = Math.sqrt((x - px) * (x - px) + (y - py) * (y - py));
+            let dx = (line.bx - line.ax) / line.length;
+            let dy = (line.by - line.ay) / line.length;
+            let rawAlong = ((x - line.ax) * dx + (y - line.ay) * dy) / line.length;
+            let along = Math.min(Math.max(rawAlong, 0.06), 0.94);
+            let across = (x - line.ax) * -dy + (y - line.ay) * dx;
+            let aside = across - line.swingAt(along);
+            let beyond = (rawAlong - along) * line.length;
+            let distance = Math.sqrt(aside * aside + beyond * beyond);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 best = line;
@@ -213,15 +331,14 @@ export class Strings {
         if (best == null) {
             return false;
         }
-        best.ringing = false;
+        best.hold(bestAlong);
         this.held = best;
-        this.heldAt = bestAlong;
-        this.heldOffset = 0;
+        this.heldOffset = best.fingerTarget;
         return true;
     }
 
-    // Moves the held string's plucked point to follow the pointer, to one
-    // side of the string and no further than it can stretch.
+    // Moves the finger on the held string to follow the pointer, to one side
+    // of the string and no further than it can stretch.
     private pull(x: f64, y: f64): void {
         let line = this.held;
         if (line == null) {
@@ -229,11 +346,12 @@ export class Strings {
         }
         let dx = (line.bx - line.ax) / line.length;
         let dy = (line.by - line.ay) / line.length;
-        let px = line.ax + (line.bx - line.ax) * this.heldAt;
-        let py = line.ay + (line.by - line.ay) * this.heldAt;
+        let px = line.ax + (line.bx - line.ax) * line.heldAt;
+        let py = line.ay + (line.by - line.ay) * line.heldAt;
         let offset = (x - px) * -dy + (y - py) * dx;
         let limit = line.length * PULL_LIMIT;
         this.heldOffset = Math.min(Math.max(offset, -limit), limit);
+        line.fingerTarget = this.heldOffset;
     }
 
     /// A press at the point: takes hold of a string there, or starts a line.
@@ -265,15 +383,12 @@ export class Strings {
         if (line != null) {
             this.pull(x, y);
             this.held = null;
+            line.letGo();
             let limit = line.length * PULL_LIMIT;
             let strength = Math.abs(this.heldOffset) / limit;
             if (strength < 0.03) {
                 return null;
             }
-            line.amplitude = this.heldOffset;
-            line.pluckedAt = this.heldAt;
-            line.age = 0;
-            line.ringing = true;
             this.struck.frequency = line.frequency;
             this.struck.strength = strength;
             return this.struck;
@@ -294,6 +409,10 @@ export class Strings {
     /// The pointer left: whatever was in hand is dropped without a sound.
     cancel(): void {
         this.drawing = false;
+        let line = this.held;
+        if (line != null) {
+            line.letGo();
+        }
         this.held = null;
     }
 
@@ -317,15 +436,16 @@ export class Strings {
         return line;
     }
 
+    /// Moves every moving string on by one STRING_STEP.
+    step(): void {
+        for (let i = 0; i < this.lines.length; i++) {
+            this.lines[i].step();
+        }
+    }
+
     advance(seconds: f64): void {
         for (let i = this.lines.length - 1; i >= 0; i--) {
             let line = this.lines[i];
-            if (line.ringing) {
-                line.age += seconds;
-                if (!line.lively) {
-                    line.ringing = false;
-                }
-            }
             if (line.leaving) {
                 line.presence -= seconds / LET_GO;
                 if (line.presence <= 0) {
@@ -338,28 +458,20 @@ export class Strings {
         }
     }
 
-    // Rebuilds a string's path as it now stands: at rest, held aside or
-    // ringing.
+    // Rebuilds a string's path through its points as they now stand.
     private shape(line: StringLine): void {
         let dx = line.bx - line.ax;
         let dy = line.by - line.ay;
         let nx = -dy / line.length;
         let ny = dx / line.length;
-        let isHeld = this.held == line;
         let path = line.path;
+        let pieces = line.pieces;
+        let now = line.now;
         path.reset();
         path.moveTo(Vector.xy(<f32>line.ax, <f32>line.ay));
-        for (let i = 1; i <= PIECES; i++) {
-            let along = <f64>i / <f64>PIECES;
-            let aside: f64 = 0;
-            if (isHeld) {
-                // Two straight runs meeting where it is held.
-                aside = along < this.heldAt
-                    ? this.heldOffset * along / this.heldAt
-                    : this.heldOffset * (1 - along) / (1 - this.heldAt);
-            } else {
-                aside = line.swingAt(along);
-            }
+        for (let i = 1; i <= pieces; i++) {
+            let along = <f64>i / <f64>pieces;
+            let aside = now[i];
             path.lineTo(Vector.xy(
                 <f32>(line.ax + dx * along + nx * aside),
                 <f32>(line.ay + dy * along + ny * aside)));
