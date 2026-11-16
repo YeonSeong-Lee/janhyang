@@ -13,9 +13,13 @@ import { Inputs, Note, Pluck } from "./pluck";
 // and a headless capture advances many times before its single draw.
 const MAX_CATCH_UP: f64 = 0.5;
 // How hard a string at full swing pushes the surface each step.
-const PUSH: f64 = 0.05;
+const PUSH: f64 = 0.045;
 // Points to either side of a string its push reaches.
 const REACH: f64 = 12;
+// Points a string held by a finger may move in a step and leave the water
+// still: a hand easing a string aside moves it about a point a step, and
+// slides it through the water. Let go, every motion stirs it.
+const QUIET: f64 = 2;
 // Times the sound is started before a failing one is left silent.
 const MAX_SOUND_STARTS: i32 = 3;
 
@@ -99,6 +103,8 @@ export class Main extends Layout {
         if (this.pointerIsDown) {
             this.strings.drag(<f64>event.position.x, <f64>event.position.y);
             event.hit();
+        } else {
+            this.strings.hover(<f64>event.position.x, <f64>event.position.y);
         }
     }
 
@@ -108,6 +114,7 @@ export class Main extends Layout {
         }
         this.pointerIsDown = false;
         let struck = this.strings.release(<f64>event.position.x, <f64>event.position.y);
+        this.strings.unhover();
         if (struck != null) {
             this.note.frequency = <f32>struck.frequency;
             this.note.gain = <f32>(0.25 + 0.75 * struck.strength);
@@ -119,6 +126,7 @@ export class Main extends Layout {
     override pointerExit(event: PointerEvent): void {
         this.pointerIsDown = false;
         this.strings.cancel();
+        this.strings.unhover();
     }
 
     override draw(renderer: Renderer): void {
@@ -141,7 +149,8 @@ export class Main extends Layout {
                 }
                 line.sample(this.offsets, this.previous);
                 medium.setString(count, line.ax, line.ay, line.bx, line.by,
-                    PUSH * line.presence, REACH, this.offsets, this.previous);
+                    PUSH * line.presence, REACH,
+                    line.heldPoint >= 0 ? QUIET : 0, line.fullSpeed, this.offsets, this.previous);
                 count++;
             }
             medium.step(count);

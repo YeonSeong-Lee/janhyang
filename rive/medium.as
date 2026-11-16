@@ -203,7 +203,7 @@ export class Medium {
     /// points, and at SAMPLES points along it how far it stands aside now
     /// and stood aside a step before, in points.
     setString(index: i32, ax: f64, ay: f64, bx: f64, by: f64, drive: f64, reach: f64,
-              offsets: StaticArray<f32>, previous: StaticArray<f32>): void {
+              quiet: f64, full: f64, offsets: StaticArray<f32>, previous: StaticArray<f32>): void {
         if (index < 0 || index >= MAX_STRINGS || this.width <= 0 || this.height <= 0) {
             return;
         }
@@ -215,6 +215,8 @@ export class Medium {
         Buffer.writef32(bytes, at + 12, by / this.height);
         Buffer.writef32(bytes, at + 16, drive);
         Buffer.writef32(bytes, at + 20, reach / this.height);
+        Buffer.writef32(bytes, at + 24, quiet / this.height);
+        Buffer.writef32(bytes, at + 28, full / this.height);
         for (let i = 0; i < SAMPLES; i++) {
             Buffer.writef32(bytes, at + 32 + i * 4, <f64>offsets[i] / this.height);
             Buffer.writef32(bytes, at + 32 + (SAMPLES + i) * 4, <f64>previous[i] / this.height);

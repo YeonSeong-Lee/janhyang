@@ -9,12 +9,22 @@ import { Vector } from "rive/vector";
 /// The most strings kept; drawing one more lets the oldest go.
 export const MAX_KEPT: i32 = 12;
 
-// Points from a string within which a press takes hold of it.
-const GRAB_REACH: f64 = 18;
+// Points from a string within which a press takes hold of it, and within
+// which the pointer, not pressed, marks where it would.
+const GRAB_REACH: f64 = 24;
 // A line shorter than this, in points, is a tap and makes no string.
 const SHORTEST: f64 = 40;
-// The furthest a string can be pulled aside, as a fraction of its length.
+// How far a string is pulled aside for its loudest note, as a fraction of
+// its length. Up to PULL_GIVE of that it follows the pointer exactly; past
+// it the string pushes back harder the further it goes and never passes
+// PULL_MOST, so the hand feels the limit coming instead of hitting a wall.
 const PULL_LIMIT: f64 = 0.22;
+const PULL_GIVE: f64 = 0.6;
+const PULL_MOST: f64 = 1.25;
+// Seconds the look of a string's tension takes to ease off once it goes
+// slack, and a hover mark to come or go.
+const EASE_TENSION: f64 = 0.35;
+const EASE_HOVER: f64 = 0.12;
 // Seconds a string let go takes to fade away.
 const LET_GO: f64 = 0.9;
 /// Points along a string at which its shape and motion are handed to the
@@ -106,6 +116,19 @@ export class StringLine {
     finger: f64 = 0;
     /// Steps taken while held; none means the pull was never seen moving.
     stepsHeld: i32 = 0;
+
+    /// Points it moves in a STRING_STEP at the most when let go from its
+    /// furthest pull at the middle: a corner runs at twice its length times
+    /// its swings a second, and moves the string as fast as the slope it
+    /// leaves.
+    get fullSpeed(): f64 {
+        return 4 * PULL_LIMIT * this.length * this.rate * STRING_STEP;
+    }
+
+    /// How taut it looks, 0 to 1: how far it stands aside for its length,
+    /// rising at once and easing off as it goes slack, so a ringing string
+    /// does not flicker as it passes through its rest line.
+    tension: f64 = 0;
 
     /// 1 while kept, falling to 0 once it is let go for good.
     presence: f64 = 1;
@@ -242,16 +265,23 @@ export class StringLine {
                 last = here;
             }
         }
+        let peak: f64 = 0;
+        for (let i = 0; i <= n; i++) {
+            peak = Math.max(peak, Math.abs(now[i]));
+        }
+        let taut = Math.min(peak / (this.length * PULL_LIMIT), 1);
+        this.tension = Math.max(taut, this.tension * Math.exp(-STRING_STEP / EASE_TENSION));
         if (held < 0) {
             let largest: f64 = 0;
             for (let i = 0; i <= n; i++) {
                 largest = Math.max(largest, Math.max(Math.abs(now[i]), Math.abs(before[i])));
             }
-            if (largest < STILL) {
+            if (largest < STILL && this.tension < 0.01) {
                 for (let i = 0; i <= n; i++) {
                     now[i] = 0;
                     before[i] = 0;
                 }
+                this.tension = 0;
                 this.awake = false;
             }
         }
@@ -294,8 +324,19 @@ export class Strings {
     held: StringLine? = null;
     heldOffset: f64 = 0;
 
+    // The string a press at the pointer would take hold of, and where along
+    // it; `hoverShown` eases in and out so the mark does not blink.
+    hovered: StringLine? = null;
+    hoverAlong: f64 = 0;
+    hoverShown: f64 = 0;
+    // The string the hover mark was last drawn on, kept while it fades.
+    hoverDrawn: StringLine? = null;
+    // How far the held point has come in, for the mark under the finger.
+    gripShown: f64 = 0;
+
     struck: Struck = new Struck();
     paint: Paint = new Paint();
+    dot: Path = new Path();
 
     constructor() {
         this.paint.style = PaintStyle.stroke;
@@ -303,12 +344,13 @@ export class Strings {
         this.paint.join = StrokeJoin.round;
     }
 
-    // Takes hold of the nearest string within reach of the point, if any,
-    // where it stands now: a ringing string is caught mid swing.
-    private take(x: f64, y: f64): bool {
+    // The nearest string within `reach` of the point where it stands now,
+    // or null; `nearAlong` is set to where along it.
+    private nearAlong: f64 = 0;
+    private nearest(x: f64, y: f64, reach: f64): StringLine? {
         let best: StringLine? = null;
         let bestAlong: f64 = 0;
-        let bestDistance: f64 = GRAB_REACH;
+        let bestDistance: f64 = reach;
         for (let i = 0; i < this.lines.length; i++) {
             let line = this.lines[i];
             if (line.leaving) {
@@ -328,10 +370,18 @@ export class Strings {
                 bestAlong = along;
             }
         }
+        this.nearAlong = bestAlong;
+        return best;
+    }
+
+    // Takes hold of the nearest string within reach of the point, if any,
+    // where it stands now: a ringing string is caught mid swing.
+    private take(x: f64, y: f64): bool {
+        let best = this.nearest(x, y, GRAB_REACH);
         if (best == null) {
             return false;
         }
-        best.hold(bestAlong);
+        best.hold(this.nearAlong);
         this.held = best;
         this.heldOffset = best.fingerTarget;
         return true;
@@ -350,12 +400,28 @@ export class Strings {
         let py = line.ay + (line.by - line.ay) * line.heldAt;
         let offset = (x - px) * -dy + (y - py) * dx;
         let limit = line.length * PULL_LIMIT;
-        this.heldOffset = Math.min(Math.max(offset, -limit), limit);
+        this.heldOffset = resist(offset, limit);
         line.fingerTarget = this.heldOffset;
+    }
+
+    /// The pointer moved while up: marks the string a press would take.
+    hover(x: f64, y: f64): void {
+        let line = this.nearest(x, y, GRAB_REACH);
+        this.hovered = line;
+        if (line != null) {
+            this.hoverAlong = this.nearAlong;
+            this.hoverDrawn = line;
+        }
+    }
+
+    /// The pointer left or went down: no string is marked.
+    unhover(): void {
+        this.hovered = null;
     }
 
     /// A press at the point: takes hold of a string there, or starts a line.
     press(x: f64, y: f64): void {
+        this.hovered = null;
         if (this.take(x, y)) {
             return;
         }
@@ -385,7 +451,7 @@ export class Strings {
             this.held = null;
             line.letGo();
             let limit = line.length * PULL_LIMIT;
-            let strength = Math.abs(this.heldOffset) / limit;
+            let strength = Math.min(Math.abs(this.heldOffset) / limit, 1);
             if (strength < 0.03) {
                 return null;
             }
@@ -444,6 +510,10 @@ export class Strings {
     }
 
     advance(seconds: f64): void {
+        let hoverGoal = this.hovered != null ? 1.0 : 0.0;
+        this.hoverShown = ease(this.hoverShown, hoverGoal, seconds, EASE_HOVER);
+        let gripGoal = this.held != null ? 1.0 : 0.0;
+        this.gripShown = ease(this.gripShown, gripGoal, seconds, EASE_HOVER);
         for (let i = this.lines.length - 1; i >= 0; i--) {
             let line = this.lines[i];
             if (line.leaving) {
@@ -451,6 +521,12 @@ export class Strings {
                 if (line.presence <= 0) {
                     if (this.held == line) {
                         this.held = null;
+                    }
+                    if (this.hovered == line) {
+                        this.hovered = null;
+                    }
+                    if (this.hoverDrawn == line) {
+                        this.hoverDrawn = null;
                     }
                     this.lines.splice(i, 1);
                 }
@@ -478,21 +554,74 @@ export class Strings {
         }
     }
 
+    // Where a string stands at `along`, 0 to 1, in the scene.
+    private pointOn(line: StringLine, along: f64): Vector {
+        let aside = line.swingAt(along);
+        return Vector.xy(
+            <f32>(line.ax + (line.bx - line.ax) * along - (line.by - line.ay) / line.length * aside),
+            <f32>(line.ay + (line.by - line.ay) * along + (line.bx - line.ax) / line.length * aside));
+    }
+
+    // A round mark at `at`: a soft halo and a bright centre.
+    private drawDot(renderer: Renderer, at: Vector, size: f64, glow: Color, core: Color): void {
+        let dot = this.dot;
+        let paint = this.paint;
+        dot.reset();
+        dot.moveTo(at);
+        dot.lineTo(Vector.xy(at.x + 0.01, at.y));
+        paint.thickness = <f32>(size * 3.2);
+        paint.feather = <f32>(size * 3);
+        paint.color = glow;
+        renderer.drawPath(dot, paint);
+        paint.thickness = <f32>size;
+        paint.feather = 0;
+        paint.color = core;
+        renderer.drawPath(dot, paint);
+    }
+
     draw(renderer: Renderer): void {
         let paint = this.paint;
+        let hoverDrawn = this.hoverDrawn;
+        let hoverShown = smooth(this.hoverShown);
         for (let i = 0; i < this.lines.length; i++) {
             let line = this.lines[i];
             this.shape(line);
             let presence = Math.max(line.presence, 0);
-            // A soft glow under a fine bright core.
-            paint.thickness = 7;
-            paint.feather = 9;
-            paint.color = Color.rgba(150, 205, 255, <i32>(70 * presence));
+            // Taut, the string takes on the colour the ink it leaves will
+            // have, cold to hot, and burns brighter and finer; a string the
+            // pointer is over lifts a little.
+            let tension = line.tension;
+            let lift = hoverDrawn == line && this.held == null ? hoverShown : 0;
+            let heat = inkColor(0.15 + 0.7 * tension);
+            let glowAlpha = (70 + 40 * lift + 120 * tension) * presence;
+            paint.thickness = <f32>(7 + 5 * tension);
+            paint.feather = <f32>(9 + 6 * tension);
+            paint.color = Color.lerp(Color.rgba(150, 205, 255, <i32>glowAlpha),
+                withAlpha(heat, <i32>glowAlpha),
+                <f32>Math.min(tension * 1.6, 1));
             renderer.drawPath(line.path, paint);
-            paint.thickness = 1.6;
+            paint.thickness = <f32>(1.6 - 0.4 * tension + 0.3 * lift);
             paint.feather = 0;
-            paint.color = Color.rgba(232, 242, 255, <i32>(235 * presence));
+            paint.color = Color.lerp(Color.rgba(232, 242, 255, <i32>(235 * presence)),
+                Color.rgba(255, 252, 245, <i32>(255 * presence)), <f32>tension);
             renderer.drawPath(line.path, paint);
+        }
+        // Under the finger, the point it holds the string by.
+        let held = this.held;
+        let grip = smooth(this.gripShown);
+        if (held != null && grip > 0.01) {
+            let at = this.pointOn(held, held.heldAt);
+            let heat = inkColor(0.15 + 0.7 * held.tension);
+            this.drawDot(renderer, at, 3 + 1.5 * held.tension,
+                withAlpha(heat, <i32>(150 * grip)),
+                Color.rgba(255, 252, 245, <i32>(255 * grip)));
+        }
+        // Where a press would take hold.
+        if (hoverDrawn != null && held == null && hoverShown > 0.01 && !this.drawing) {
+            let at = this.pointOn(hoverDrawn, this.hoverAlong);
+            this.drawDot(renderer, at, 2.4 * hoverShown,
+                Color.rgba(150, 205, 255, <i32>(110 * hoverShown)),
+                Color.rgba(232, 242, 255, <i32>(200 * hoverShown)));
         }
         if (this.drawing) {
             let draft = this.draft;
@@ -505,4 +634,46 @@ export class Strings {
             renderer.drawPath(draft, paint);
         }
     }
+}
+
+// How far aside a string stands when the pointer is `offset` from it: the
+// same up to PULL_GIVE of `limit`, then giving less and less ground, so it
+// reaches `limit` only well past it and PULL_MOST of it never.
+function resist(offset: f64, limit: f64): f64 {
+    let give = limit * PULL_GIVE;
+    let span = limit * (PULL_MOST - PULL_GIVE);
+    let size = Math.abs(offset);
+    if (size <= give) {
+        return offset;
+    }
+    let over = (size - give) / span;
+    let held = give + span * (1 - 1 / (1 + over));
+    return offset < 0 ? -held : held;
+}
+
+// Moves `from` toward `to`, closing most of the gap in about `time` seconds.
+function ease(from: f64, to: f64, seconds: f64, time: f64): f64 {
+    return to + (from - to) * Math.exp(-seconds * 3 / time);
+}
+
+function smooth(t: f64): f64 {
+    let c = Math.min(Math.max(t, 0), 1);
+    return c * c * (3 - 2 * c);
+}
+
+// The ink's colours, cold to hot, as show.wgsl paints them: deep blue, cyan,
+// amber, near white.
+function inkColor(amount: f64): Color {
+    let a = Math.min(Math.max(amount, 0), 1);
+    if (a < 0.33) {
+        return Color.lerp(Color.rgb(13, 89, 242), Color.rgb(26, 217, 230), <f32>(a / 0.33));
+    }
+    if (a < 0.66) {
+        return Color.lerp(Color.rgb(26, 217, 230), Color.rgb(255, 158, 38), <f32>((a - 0.33) / 0.33));
+    }
+    return Color.lerp(Color.rgb(255, 158, 38), Color.rgb(255, 242, 217), <f32>((a - 0.66) / 0.34));
+}
+
+function withAlpha(color: Color, alpha: i32): Color {
+    return Color.rgba(<i32>Color.red(color), <i32>Color.green(color), <i32>Color.blue(color), alpha);
 }

@@ -15,6 +15,10 @@ struct StringDrive {
     ends: vec4<f32>,
     // x: how hard its motion pushes the surface. y: how far to either side
     // of it the push reaches, in scene space as a fraction of the height.
+    // z: how far it may move in a step, likewise, and still leave the water
+    // be: a string eased aside by hand slides through it. w: how far it
+    // moves in a step when let go from its furthest pull, which pushes all
+    // it can.
     drive: vec4<f32>,
     // At 32 points along it, ends included, four to a vec4: how far it
     // stands aside from its rest line, toward the left of a to b, in scene
@@ -90,13 +94,18 @@ fn stringPush(p: vec2<f32>, line: StringDrive) -> f32 {
     let before = sampled(line.previous, along);
     let moved = now - before;
     let reach = line.drive.y;
-    // Inside the band it swept, softened by `reach` at both edges.
+    // Inside the band it swept, its edges softened across `reach` centred
+    // on them, so the bands of one step and the next meet without a seam:
+    // where one fades out the other fades in.
     let low = min(now, before);
     let high = max(now, before);
-    let inside = smoothstep(low - reach, low, across) * (1.0 - smoothstep(high, high + reach, across));
-    // A slow string pushes gently; one that crosses its own reach in a step
-    // or more pushes all it can.
-    let strength = min(abs(moved) / reach, 1.0);
+    let inside = smoothstep(low - 0.5 * reach, low + 0.5 * reach, across)
+        - smoothstep(high - 0.5 * reach, high + 0.5 * reach, across);
+    // A string eased aside by hand slides through the water; once it moves
+    // faster than that it pushes evenly. The band it sweeps is already as
+    // wide as it moved, so a harder pluck stirs more water, and a light one
+    // still shows.
+    let strength = smoothstep(0.0, 0.25, (abs(moved) - line.drive.z) / line.drive.w);
     return inside * strength * sign(moved) * line.drive.x;
 }
 
@@ -129,8 +138,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         velocity += stringPush(in.scene, sim.strings[i]);
     }
 
-    // Ink is left where the surface moves, and settles slowly.
-    ink = max(ink * 0.9975, min(abs(height) * 0.8, 1.0));
+    // Ink is left where the surface moves, and settles slowly. It nears its
+    // fullest gradually, so a hard pluck leaves a glow that fades at its
+    // edges rather than a flat sheet.
+    ink = max(ink * 0.9975, 1.0 - exp(-abs(height) * 0.9));
 
     // Edges soak the wave up instead of mirroring it.
     let edge = vec2<f32>(min(at, limit - at));
