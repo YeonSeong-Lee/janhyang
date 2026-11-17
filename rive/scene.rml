@@ -1,0 +1,66 @@
+<Rive version="1" kind="fragment">
+<Artboard name="main" id="0:2" width="1280" height="720" styleId="0:5"
+          defaultStateMachineId="0:7" viewModelId="0:40" viewModelInstanceId="0:41">
+    <LayoutComponentStyle name="Artboard Style" id="0:5"/>
+    <LayoutComponent name="Root" id="0:10" styleId="0:11">
+        <LayoutComponentStyle name="Style" id="0:11" layoutWidthScaleType="fill"
+            layoutHeightScaleType="fill" widthUnitsValue="auto" heightUnitsValue="auto"/>
+        <ScriptedLayout name="Instrument" id="0:12" scriptAssetId="0:80">
+            <ScriptInputNumber name="lengthFraction" propertyValue="0.5">
+                <DataBindContext sourcePathIds="0:40-0:42" propertyKey="243"/>
+            </ScriptInputNumber>
+            <ScriptInputNumber name="pluckStrength" propertyValue="0.5">
+                <DataBindContext sourcePathIds="0:40-0:43" propertyKey="243"/>
+            </ScriptInputNumber>
+            <ScriptInputTrigger name="createString">
+                <DataBindContext sourcePathIds="0:40-0:44" propertyKey="870"/>
+            </ScriptInputTrigger>
+            <ScriptInputTrigger name="previousString">
+                <DataBindContext sourcePathIds="0:40-0:45" propertyKey="870"/>
+            </ScriptInputTrigger>
+            <ScriptInputTrigger name="nextString">
+                <DataBindContext sourcePathIds="0:40-0:46" propertyKey="870"/>
+            </ScriptInputTrigger>
+            <ScriptInputTrigger name="pluckString">
+                <DataBindContext sourcePathIds="0:40-0:47" propertyKey="870"/>
+            </ScriptInputTrigger>
+        </ScriptedLayout>
+    </LayoutComponent>
+    <StateMachine name="State Machine 1" id="0:7">
+        <StateMachineLayer name="Layer 1" id="0:8"><AnyState/><ExitState/><EntryState/></StateMachineLayer>
+    </StateMachine>
+</Artboard>
+<ScriptAsset file="main.as" name="main" id="0:80"/>
+<ViewModel name="Instrument" id="0:40" defaultInstanceId="0:41">
+    <ViewModelPropertyNumber name="lengthFraction" id="0:42"/>
+    <ViewModelPropertyNumber name="pluckStrength" id="0:43"/>
+    <ViewModelPropertyTrigger name="createString" id="0:44"/>
+    <ViewModelPropertyTrigger name="previousString" id="0:45"/>
+    <ViewModelPropertyTrigger name="nextString" id="0:46"/>
+    <ViewModelPropertyTrigger name="pluckString" id="0:47"/>
+    <ViewModelPropertyNumber name="stringCount" id="0:48"/>
+    <ViewModelPropertyNumber name="selectedString" id="0:49"/>
+    <ViewModelPropertyNumber name="frequency" id="0:50"/>
+    <ViewModelPropertyNumber name="notesPlayed" id="0:51"/>
+    <ViewModelPropertyBoolean name="bowMode" id="0:60"/>
+    <ViewModelPropertyString name="cursor" id="0:61"/>
+    <ViewModelPropertyNumber name="cancelGesture" id="0:62"/>
+    <ViewModelPropertyNumber name="bowContacts" id="0:63"/>
+    <ViewModelInstance name="Default" id="0:41" exports="true">
+        <ViewModelInstanceNumber viewModelPropertyId="0:42" propertyValue="0.5"/>
+        <ViewModelInstanceNumber viewModelPropertyId="0:43" propertyValue="0.5"/>
+        <ViewModelInstanceTrigger viewModelPropertyId="0:44"/>
+        <ViewModelInstanceTrigger viewModelPropertyId="0:45"/>
+        <ViewModelInstanceTrigger viewModelPropertyId="0:46"/>
+        <ViewModelInstanceTrigger viewModelPropertyId="0:47"/>
+        <ViewModelInstanceNumber viewModelPropertyId="0:48" propertyValue="0"/>
+        <ViewModelInstanceNumber viewModelPropertyId="0:49" propertyValue="0"/>
+        <ViewModelInstanceNumber viewModelPropertyId="0:50" propertyValue="0"/>
+        <ViewModelInstanceNumber viewModelPropertyId="0:51" propertyValue="0"/>
+        <ViewModelInstanceBoolean viewModelPropertyId="0:60" propertyValue="false"/>
+        <ViewModelInstanceString viewModelPropertyId="0:61" propertyValue="crosshair"/>
+        <ViewModelInstanceNumber viewModelPropertyId="0:62" propertyValue="0"/>
+        <ViewModelInstanceNumber viewModelPropertyId="0:63" propertyValue="0"/>
+    </ViewModelInstance>
+</ViewModel>
+</Rive>

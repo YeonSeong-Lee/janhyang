@@ -125,6 +125,10 @@ export class StringLine {
     finger: f64 = 0;
     /// Steps taken while held; none means the pull was never seen moving.
     stepsHeld: i32 = 0;
+    // A moving bow drives a point continuously; it never pins the string.
+    bowAt: f64 = 0.5;
+    bowStrength: f64 = 0;
+    bowPhase: f64 = 0;
 
     /// Points it moves in a STRING_STEP at the most when let go from its
     /// furthest pull at the middle: a corner runs at twice its length times
@@ -227,6 +231,7 @@ export class StringLine {
 
     /// Moves the string on by one STRING_STEP.
     step(): void {
+        if (this.bowStrength > 0) this.awake = true;
         if (!this.awake) {
             return;
         }
@@ -242,6 +247,7 @@ export class StringLine {
         let fingerStart = this.finger;
         let fingerEnd = fingerStart + (this.fingerTarget - fingerStart) * (1 - Math.exp(-STRING_STEP * FINGER));
         this.finger = fingerEnd;
+        this.bowPhase += 2 * Math.PI * this.rate * STRING_STEP;
         for (let s = 0; s < this.substeps; s++) {
             // Tension pulls each point toward its neighbours; it keeps going
             // as it was going, less what the air takes.
@@ -256,6 +262,10 @@ export class StringLine {
             next[n] = 0;
             if (held >= 0) {
                 next[held] = fingerStart + (fingerEnd - fingerStart) * <f64>(s + 1) / <f64>this.substeps;
+            } else if (this.bowStrength > 0) {
+                let contact = <i32>Math.max(1, Math.min(n - 1, Math.round(this.bowAt * n)));
+                let target = Math.sin(this.bowPhase) * Math.min(10, this.length * 0.025) * this.bowStrength;
+                next[contact] += (target - next[contact]) * 0.35 / <f64>this.substeps;
             }
             for (let i = 0; i <= n; i++) {
                 before[i] = now[i];
@@ -393,6 +403,11 @@ export class Strings {
         return best;
     }
 
+    /// Used to orient the bow across the nearest string, including in gaps.
+    nearestTo(x: f64, y: f64): StringLine? {
+        return this.nearest(x, y, Infinity);
+    }
+
     // Takes hold of the nearest string within reach of the point, if any,
     // where it stands now: a ringing string is caught mid swing.
     private take(x: f64, y: f64): bool {
@@ -440,6 +455,7 @@ export class Strings {
 
     /// A press at the point: takes hold of a string there, or starts a line.
     press(x: f64, y: f64): void {
+        this.cancel();
         this.hovered = null;
         if (this.take(x, y)) {
             return;
@@ -642,6 +658,23 @@ export class Strings {
         renderer.drawPath(dot, paint);
     }
 
+    /// An open ring reads as a place to grab; a smaller ring closes on press.
+    drawGrip(renderer: Renderer, at: Vector, radius: f64, alpha: f64): void {
+        let path = this.dot;
+        path.reset();
+        for (let i = 0; i <= 32; i++) {
+            let angle = <f64>i * Math.PI * 2 / 32;
+            let point = Vector.xy(at.x + <f32>(Math.cos(angle) * radius),
+                at.y + <f32>(Math.sin(angle) * radius));
+            if (i == 0) path.moveTo(point);
+            else path.lineTo(point);
+        }
+        this.paint.feather = 0;
+        this.paint.thickness = 1.5;
+        this.paint.color = Color.rgba(220, 239, 255, <i32>(220 * alpha));
+        renderer.drawPath(path, this.paint);
+    }
+
     draw(renderer: Renderer): void {
         let paint = this.paint;
         let hoverDrawn = this.hoverDrawn;
@@ -653,7 +686,7 @@ export class Strings {
             // Taut, the string takes on the colour the ink it leaves will
             // have, cold to hot, and burns brighter and finer; a string the
             // pointer is over lifts a little.
-            let tension = line.tension;
+            let tension = Math.max(line.tension, line.bowStrength * 0.7);
             let lift = hoverDrawn == line && this.held == null ? hoverShown : 0;
             let heat = inkColor(0.15 + 0.7 * tension);
             let glowAlpha = (70 + 40 * lift + 120 * tension) * presence;
@@ -675,6 +708,7 @@ export class Strings {
         if (held != null && grip > 0.01) {
             let at = this.pointOn(held, held.heldAt);
             let heat = inkColor(0.15 + 0.7 * held.tension);
+            this.drawGrip(renderer, at, 6 + 4 * (1 - grip), grip);
             this.drawDot(renderer, at, 3 + 1.5 * held.tension,
                 withAlpha(heat, <i32>(150 * grip)),
                 Color.rgba(255, 252, 245, <i32>(255 * grip)));
@@ -682,6 +716,7 @@ export class Strings {
         // Where a press would take hold.
         if (hoverDrawn != null && held == null && hoverShown > 0.01 && !this.drawing) {
             let at = this.pointOn(hoverDrawn, this.hoverAlong);
+            this.drawGrip(renderer, at, 11 + 3 * (1 - hoverShown), hoverShown);
             this.drawDot(renderer, at, 2.4 * hoverShown,
                 Color.rgba(150, 205, 255, <i32>(110 * hoverShown)),
                 Color.rgba(232, 242, 255, <i32>(200 * hoverShown)));

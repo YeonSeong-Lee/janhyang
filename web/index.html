@@ -51,17 +51,44 @@
         position: fixed;
         inset-inline-end: max(12px, env(safe-area-inset-right));
         inset-block-end: max(12px, env(safe-area-inset-bottom));
-        display: flex; gap: 8px; align-items: end;
+        display: flex; flex-wrap: wrap; justify-content: end; gap: 8px; align-items: end;
         max-width: calc(100% - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)));
       }
-      button, summary { min-height: 44px; padding: 10px 14px; font: inherit; cursor: pointer; }
+      button, summary { min-height: 44px; padding: 10px 14px; font: inherit; cursor: pointer; touch-action: manipulation; }
       button, details, .message, #report { border: 1px solid #67778e; border-radius: 8px; background: #0b1019; color: inherit; }
       button { flex-shrink: 0; }
-      button[aria-disabled="true"] { cursor: wait; }
-      :where(button, summary, a, pre):focus-visible { outline: 2px solid #b9dfff; outline-offset: 3px; }
-      details { min-width: 0; max-width: 32rem; max-height: 70dvh; overflow: auto; }
+      button[aria-pressed="true"] { border-color: #d8b785; background: #30291f; color: #fff0d5; }
+      button[aria-disabled="true"] { cursor: not-allowed; color: #9baac0; }
+      #playback[aria-disabled="true"] { cursor: wait; }
+      :where(button, summary, select, a, pre):focus-visible { outline: 2px solid #b9dfff; outline-offset: 3px; }
+      summary:focus-visible { outline-offset: -4px; border-radius: 6px; }
+      @media (hover: hover) {
+        button:not([aria-disabled="true"]):hover, summary:hover { background: #1b2b40; color: #fff; }
+        button:not([aria-disabled="true"]):hover { border-color: #b9dfff; }
+      }
+      button:not([aria-disabled="true"]):active, summary:active { background: #263b53; color: #fff; }
+      details { min-width: 0; max-width: 32rem; max-height: 70dvh; overflow: auto; overscroll-behavior: contain; }
+      details[open] { flex-basis: 100%; order: -1; }
+      #gesture-hint {
+        position: fixed; inset-block-start: max(18px, env(safe-area-inset-top));
+        inset-inline: 20px; width: fit-content; max-width: calc(100% - 40px);
+        margin: 0 auto; padding: 8px 12px; border-radius: 20px;
+        color: #cbd9e9; background: #0b1019e6; font-size: 14px; line-height: 1.6;
+        text-align: center; pointer-events: none;
+      }
+      @media (max-width: 480px) {
+        .controls { gap: 6px; }
+        .controls > button, summary { padding-inline: 10px; font-size: 14px; }
+      }
       summary { overflow-wrap: anywhere; }
       details p { margin: 0; padding: 0 14px 14px; line-height: 1.6; }
+      fieldset { min-width: 0; margin: 0 14px 14px; padding: 12px; border: 1px solid #67778e; border-radius: 6px; }
+      legend { padding-inline: 4px; }
+      .instrument-fields { display: grid; gap: 10px; }
+      .instrument-fields label { display: grid; gap: 6px; }
+      .instrument-fields button { min-width: 0; width: 100%; overflow-wrap: anywhere; }
+      select { min-width: 0; width: 100%; min-height: 44px; font: inherit; color: inherit; background: #0b1019; border: 1px solid #67778e; border-radius: 4px; }
+      fieldset p { padding: 0; overflow-wrap: anywhere; }
       .message {
         position: absolute;
         inset-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
@@ -89,17 +116,44 @@
       <canvas id="stage" width="1280" height="720" role="img" aria-label="현과 파문으로 연주하는 수면" aria-describedby="instructions">
         수면에 선을 그어 현을 만들고, 당겼다 놓아 소리와 파문을 만드는 작품입니다.
       </canvas>
-      <p id="loading" class="message" hidden>수면을 준비하고 있습니다…</p>
+      <p id="gesture-hint" hidden>빈 곳을 드래그해 현을 만드세요</p>
       <div id="notice">
-        <p id="status" role="status"></p>
+        <p id="status" role="status" aria-live="polite" aria-atomic="true"></p>
         <button id="retry" type="button" hidden>다시 불러오기</button>
       </div>
       <div class="controls">
         <button id="playback" type="button" aria-controls="stage" hidden>재생</button>
+        <button id="bow-mode" type="button" aria-controls="stage" aria-pressed="false" aria-describedby="bow-instructions" hidden>활로 켜기</button>
         <details>
           <summary>사용 안내</summary>
-          <p id="instructions">빈 수면을 마우스나 손가락으로 드래그해 현을 만드세요. 만든 현을 옆으로 당겼다 놓으면 소리와 파문이 퍼집니다. 현 만들기와 연주는 마우스 또는 터치가 필요합니다.</p>
+          <p id="instructions">빈 수면을 마우스나 손가락으로 드래그해 현을 만드세요. 만든 현을 옆으로 당겼다 놓으면 소리와 파문이 퍼집니다. 키보드나 클릭만으로 연주하려면 아래 버튼을 사용하세요.</p>
+          <p id="bow-instructions">현에 가까이 가면 손 모양 커서와 고리가 나타납니다. 누르면 고리가 좁아지며 현을 잡습니다. ‘활로 켜기’를 켜고 누른 채 왕복하면, 활에 닿는 여러 현이 함께 울립니다. 활은 가까운 현에 맞춰 방향을 잡고, 누르는 동안 그 방향을 유지합니다. 손을 멈추거나 떼면 소리가 잦아듭니다. 현을 더 그리려면 ‘활로 켜기’를 끄세요.</p>
           <p>일시정지를 누르면 움직임과 소리가 멈춥니다. 움직임 줄이기 설정을 사용 중이면 재생을 눌러 시작할 수 있습니다.</p>
+          <fieldset id="instrument-controls" aria-describedby="instrument-hint" hidden>
+            <legend>버튼으로 연주</legend>
+            <div class="instrument-fields">
+              <p id="instrument-hint">재생을 누른 뒤 현을 만들고 연주할 수 있습니다.</p>
+              <label for="string-length">새 현 길이
+                <select id="string-length" name="string-length" autocomplete="off">
+                  <option value="0.3">짧게</option>
+                  <option value="0.5" selected>중간</option>
+                  <option value="0.75">길게</option>
+                </select>
+              </label>
+              <button id="create-string" type="button" aria-disabled="true">현 만들기</button>
+              <p id="selection" role="status" aria-atomic="true">아직 현이 없습니다. 현 만들기를 눌러 시작하세요.</p>
+              <button id="previous-string" type="button" aria-disabled="true">이전 현</button>
+              <button id="next-string" type="button" aria-disabled="true">다음 현</button>
+              <label for="pluck-strength">튕기는 세기
+                <select id="pluck-strength" name="pluck-strength" autocomplete="off">
+                  <option value="0.25">약하게</option>
+                  <option value="0.5" selected>보통</option>
+                  <option value="0.85">강하게</option>
+                </select>
+              </label>
+              <button id="pluck-string" type="button" aria-disabled="true">선택한 현 튕기기</button>
+            </div>
+          </fieldset>
         </details>
       </div>
       <pre id="report" role="region" aria-label="진단 정보" tabindex="0" hidden></pre>

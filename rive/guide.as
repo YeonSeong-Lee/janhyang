@@ -214,6 +214,17 @@ export class Guide {
         }
     }
 
+    /// A discrete control takes over immediately, including while the
+    /// demonstration is easing its hold away from an interrupted gesture.
+    controlStarted(strings: Strings): void {
+        this.pressed(strings);
+        if (this.step == EASING) {
+            let line = this.line;
+            if (line != null && strings.held != line) line.letGo();
+            this.step = RESTING;
+        }
+    }
+
     /// The press came up. Call it after Strings.release.
     released(strings: Strings): void {
         this.pointerDown = false;
