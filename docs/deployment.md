@@ -2,30 +2,39 @@
 
 배포 주소: [janhyang-924.pages.dev](https://janhyang-924.pages.dev/)
 
-자동 배포는 Cloudflare Pages의 Git 연동을 사용합니다. `main`에 푸시하면
-Cloudflare가 의존성 설치, 타입 검사, Vite 빌드를 수행하고 결과를 배포합니다.
-GitHub Actions 실행이나 GitHub 배포용 토큰은 필요하지 않습니다.
+자동 배포는 [GitHub Actions의 CI/CD 워크플로](https://github.com/YeonSeong-Lee/janhyang/actions/workflows/ci-cd.yml)를 사용합니다.
+`main` 대상 PR에서는 의존성 설치, 타입 검사, Vite 빌드를 수행합니다.
+`main`에 푸시하면 같은 검사를 통과한 빌드 결과를 Cloudflare Pages에 배포합니다.
+배포 작업은 검사 작업이 만든 아티팩트를 사용하며, 아티팩트는 하루 동안 보관합니다.
 
 ## 프로젝트 설정
 
 [Cloudflare Pages 프로젝트](https://dash.cloudflare.com/6ccaac2e604c4c353e2e198c73cac480/pages/view/janhyang)는
-`YeonSeong-Lee/janhyang` 저장소에 아래 설정으로 연결되어 있습니다.
+`YeonSeong-Lee/janhyang` 저장소에서 만든 빌드를 Wrangler로 업로드합니다.
+기존 Pages 프로젝트와 주소를 유지하고, Cloudflare 자체 Git 자동 빌드는 중복 배포를 막기 위해 끕니다.
 
 | 항목 | 값 |
 |---|---|
 | 프로젝트 이름 | `janhyang` |
 | Production branch | `main` |
-| Framework preset | None |
-| Root directory | `web` |
-| Build command | `pnpm build` |
-| Build output directory | `dist` |
-| 환경 변수 `NODE_VERSION` | `24` |
-| 환경 변수 `PNPM_VERSION` | `9.12.3` |
-| Preview deployments | None |
+| Actions 작업 디렉터리 | `web` |
+| 의존성 설치 | `pnpm install --frozen-lockfile` |
+| 검사 및 빌드 | `pnpm build` |
+| 빌드 결과 | `web/dist` |
+| Node.js | `24` |
+| pnpm | `web/package.json`의 `packageManager` |
+| Cloudflare 자동 Production deployments | Disabled |
+| Cloudflare 자동 Preview deployments | None |
 
-Cloudflare Workers & Pages GitHub 앱에 이 저장소의 접근 권한이 필요합니다.
-Git 연동 프로젝트로 만들어야 이후 `main` 푸시를 받아 자동 배포할 수 있습니다.
-먼저 Direct Upload 프로젝트를 만들면 나중에 Git 연동으로 바꿀 수 없습니다.
+GitHub 저장소의 **Settings → Secrets and variables → Actions**에 다음 값을 설정합니다.
+
+| 종류 | 이름 | 값 |
+|---|---|---|
+| Secret | `CLOUDFLARE_API_TOKEN` | 해당 계정의 Cloudflare Pages 편집 권한을 가진 배포 토큰 |
+| Variable | `CLOUDFLARE_ACCOUNT_ID` | `6ccaac2e604c4c353e2e198c73cac480` |
+
+토큰 원문은 저장소에 커밋하지 않습니다. 배포 토큰은 `main` 배포 단계에서만 사용하며
+PR 검사에는 전달하지 않습니다. 토큰을 교체할 때는 같은 이름의 GitHub Secret을 갱신합니다.
 
 `web/public/_headers`의 COOP·COEP 응답 헤더는 Rive 오디오 스레드에 필요한
 cross-origin isolation을 제공합니다. Vite 빌드 시 이 파일도 `dist`로 복사됩니다.
@@ -48,7 +57,6 @@ rtk proxy cp rive/build/janhyang.riv web/public/janhyang.riv
 
 ## 같은 커밋 다시 배포하기
 
-Cloudflare Pages 프로젝트의 **Deployments**에서 대상 배포를 선택하고
-**Retry deployment**를 실행합니다. 새 변경 사항은 `main`에 푸시해 배포합니다.
-
-기존 GitHub Actions 워크플로와 이를 실행하던 `deploy.sh`는 제거했습니다.
+GitHub 저장소의 **Actions → CI/CD → Run workflow**에서 `main`을 선택합니다.
+실패한 실행은 **Re-run failed jobs**로 재시도할 수 있습니다.
+`main` 이외의 브랜치에서 수동 실행하면 검사만 수행합니다.
