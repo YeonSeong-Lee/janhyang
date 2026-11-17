@@ -1,13 +1,15 @@
 # 배포
 
+배포 주소: [janhyang-924.pages.dev](https://janhyang-924.pages.dev/)
+
 자동 배포는 Cloudflare Pages의 Git 연동을 사용합니다. `main`에 푸시하면
 Cloudflare가 의존성 설치, 타입 검사, Vite 빌드를 수행하고 결과를 배포합니다.
 GitHub Actions 실행이나 GitHub 배포용 토큰은 필요하지 않습니다.
 
-## 프로젝트 연결
+## 프로젝트 설정
 
-Cloudflare의 **Workers & Pages → Create application → Pages → Import an existing Git repository**에서
-`YeonSeong-Lee/janhyang`을 선택하고 아래 값으로 연결합니다.
+[Cloudflare Pages 프로젝트](https://dash.cloudflare.com/6ccaac2e604c4c353e2e198c73cac480/pages/view/janhyang)는
+`YeonSeong-Lee/janhyang` 저장소에 아래 설정으로 연결되어 있습니다.
 
 | 항목 | 값 |
 |---|---|
