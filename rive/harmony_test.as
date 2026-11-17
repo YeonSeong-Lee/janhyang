@@ -106,5 +106,25 @@ export class HarmonyTests extends Tests {
             phrase.start(new Strings());
             expect.that(phrase.playing).is(false);
         });
+
+        test("late frames keep the phrase on time without replaying overdue notes", (expect) => {
+            let strings = new Strings();
+            strings.height = 720;
+            let controls = new Controls();
+            controls.seed(strings, 1280, 720);
+            let phrase = new Phrase();
+            phrase.start(strings);
+            expect.that(phrase.advance(0) == strings.lines[0]).is(true);
+            // At one second, the third note is due. Do not play the late
+            // second note and shift every subsequent note by another frame.
+            expect.that(phrase.advance(1) == strings.lines[2]).is(true);
+            expect.that(phrase.advance(0) == null).is(true);
+            for (let i = 0; i < 4; i++) phrase.advance(1);
+            expect.that(phrase.playing).is(false);
+            // Returning after a long suspension must not restart old notes.
+            phrase.start(strings);
+            expect.that(phrase.advance(60) == null).is(true);
+            expect.that(phrase.playing).is(false);
+        });
     }
 }

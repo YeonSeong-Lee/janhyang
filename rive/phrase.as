@@ -33,16 +33,21 @@ export class Phrase {
     advance(seconds: f64): StringLine? {
         if (!this.playing) return null;
         this.wait -= Math.max(0, seconds);
-        if (this.wait > 0) return null;
-        if (this.step >= PATTERN.length) {
-            this.stop();
-            return null;
+        let due: StringLine? = null;
+        while (this.wait <= 0) {
+            if (this.step >= PATTERN.length) {
+                this.stop();
+                return null;
+            }
+            let degree = PATTERN[this.step++];
+            let index = <i32>Math.round(<f64>degree / 2 * <f64>(this.lines.length - 1));
+            // Carry elapsed time into the next interval. A late frame plays
+            // only the latest due note, without stretching the phrase or
+            // releasing a burst of overdue notes after a long suspension.
+            this.wait += this.step == PATTERN.length ? 0.9 : 0.48;
+            let line = this.lines[index];
+            due = line.leaving ? null : line;
         }
-        let degree = PATTERN[this.step++];
-        let index = <i32>Math.round(<f64>degree / 2 * <f64>(this.lines.length - 1));
-        // A late frame extends the phrase instead of bursting overdue notes.
-        this.wait = this.step == PATTERN.length ? 0.9 : 0.48;
-        let line = this.lines[index];
-        return line.leaving ? null : line;
+        return due;
     }
 }
