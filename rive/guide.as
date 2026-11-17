@@ -1,12 +1,13 @@
 // The guide: what a first visitor is shown before they know what to do.
-// A string waits in the middle of the water, and a point of light, a finger
-// no one holds, pulls it aside and lets it go. It makes no sound, so the
-// first sound anyone hears is one they made themselves. A press anywhere
-// sends the light away and leaves the string there to be taken. Once a
-// string has rung, a tap on the empty water, or a long wait, shows how a
-// line is drawn.
+// A string waits in the middle of the water, and a mouse pointer no one
+// holds comes to it, clicks, drags the string aside faster and faster and
+// lets go on the move, as if throwing it. It makes no sound, so the first
+// sound anyone hears is one they made themselves. A press anywhere sends
+// the pointer away and leaves the string there to be taken. Once a string
+// has rung, a tap on the empty water, or a long wait, shows the same
+// pointer drawing a line.
 import { Color } from "rive/color";
-import { Paint, PaintStyle, StrokeCap } from "rive/paint";
+import { Paint, PaintStyle, StrokeCap, StrokeJoin } from "rive/paint";
 import { Path } from "rive/path";
 import { Renderer } from "rive/renderer";
 import { Vector } from "rive/vector";
@@ -17,16 +18,21 @@ import {
 
 // The steps of a pluck shown.
 const RESTING: i32 = 0;
-// The light comes to the string.
+// The pointer comes to the string: from aside the first time, and after
+// that from where it last let go.
 const COMING: i32 = 1;
-// It takes hold and pulls the string aside.
-const PULLING: i32 = 2;
-// It holds the string there a moment.
-const HOLDING: i32 = 3;
-// It has let go, and the string rings.
-const RINGING: i32 = 4;
+// It clicks, taking hold of the string, and grips it a moment.
+const PRESSING: i32 = 2;
+// It drags the string aside, faster and faster, and lets go on the move.
+const THROWING: i32 = 3;
+// Let go, it carries on a little the way it was going.
+const FOLLOWING: i32 = 4;
+// It waits while the string rings, before the next pluck.
+const WAITING: i32 = 5;
+// The showing over, it fades away.
+const LEAVING: i32 = 6;
 // Cut short while holding, it gives the string back slowly.
-const EASING: i32 = 5;
+const EASING: i32 = 7;
 
 // The steps of a line shown.
 const NO_LINE: i32 = 0;
@@ -36,20 +42,28 @@ const FADING: i32 = 3;
 
 // Seconds from the first frame to the first pluck shown.
 const FIRST_WAIT: f64 = 1.0;
-// Seconds each step of a pluck takes, and from one pluck to the next.
-const COME: f64 = 0.7;
-const PULL: f64 = 0.9;
-const HOLD: f64 = 0.3;
-const CYCLE: f64 = 3.8;
+// Seconds each step of a pluck takes: coming in from aside, coming back for
+// the next pluck, gripping, dragging until let go, carrying on, waiting
+// while the string rings, and fading away.
+const ENTER: f64 = 0.9;
+const RETURN: f64 = 0.6;
+const PRESS: f64 = 0.18;
+const THROW: f64 = 0.55;
+const FOLLOW: f64 = 0.35;
+const WAIT: f64 = 1.3;
+const LEAVE: f64 = 0.5;
 // Seconds after a press that rang nothing before the pluck is shown again,
 // and with no press at all.
 const MISSED_WAIT: f64 = 3.0;
 const IDLE_WAIT: f64 = 20.0;
-// Seconds the light takes to come up, to fade after a pluck, and to go when
-// the visitor sends it away.
-const LIGHT_IN: f64 = 0.25;
-const LIGHT_OUT: f64 = 0.35;
-const LIGHT_AWAY: f64 = 0.2;
+// Seconds the pointer takes to appear, and to go when the visitor sends it
+// away.
+const POINTER_IN: f64 = 0.2;
+const POINTER_AWAY: f64 = 0.2;
+// Seconds a click takes to press in or come back out, and the ring it
+// leaves takes to spread and fade.
+const CLICK: f64 = 0.08;
+const RING: f64 = 0.45;
 // Seconds a line shown takes to be drawn, stays, and fades.
 const DRAW: f64 = 0.8;
 const SHOW: f64 = 0.35;
@@ -64,7 +78,7 @@ const MOST_MISSED: i32 = 2;
 // Lines shown after a long wait, at most.
 const MOST_IDLE_LINES: i32 = 2;
 
-// Where along the string the light takes hold, and how far it pulls as a
+// Where along the string the pointer takes hold, and how far it drags as a
 // fraction of the furthest a string can be pulled: lightly, then hard, so
 // the colour can be seen to follow the strength; in between when the pluck
 // is shown once.
@@ -72,10 +86,15 @@ const TAKE_AT: f64 = 0.42;
 const LIGHT: f64 = 0.35;
 const HARD: f64 = 0.85;
 const ONCE: f64 = 0.6;
-// Points from the string the light comes from.
-const COME_FROM: f64 = 44;
-// The size of the faint glow around the light, as drawDot takes it.
-const FINGERTIP: f64 = 8;
+// Where the pointer first comes from, from where it takes hold: below and
+// to the right, as a hand on a mouse brings it in.
+const ENTER_X: f64 = 130;
+const ENTER_Y: f64 = 105;
+// Seconds over which the pointer's carry after letting go dies away.
+const CARRY: f64 = 0.11;
+// Points within which the string marks where the coming pointer would take
+// hold, as it does under a real one.
+const REACH: f64 = 24;
 // Points a second a string cut short is given back at: slow enough to stay
 // under QUIET in main.as, so the water is left still.
 const GIVE_BACK: f64 = 240;
@@ -84,6 +103,16 @@ const LEAN: f64 = -0.08;
 // The longest line shown, in points, and how far from the edges it keeps.
 const LINE_LENGTH: f64 = 160;
 const MARGIN: f64 = 28;
+
+// The pointer: an arrow with its tip at 0, 0, y down, in points, about 20
+// tall, and how far it shrinks while pressed. Its corners go clockwise on
+// screen, as a fill and a feathered fill need under the default rule.
+const ARROW_X: StaticArray<f64> = [0, 13.0, 7.4, 10.3, 7.3, 4.3, 0];
+const ARROW_Y: StaticArray<f64> = [0, 12.5, 12.5, 19.1, 20.4, 13.6, 17.5];
+const PRESSED: f64 = 0.12;
+// How far a quarter circle's control points stand from its ends, for a
+// ring drawn as four curves.
+const KAPPA: f64 = 0.5523;
 
 export class Guide {
     /// The string the pluck is shown on, while it is kept.
@@ -96,19 +125,23 @@ export class Guide {
     // Seconds since the last press or release.
     idle: f64 = 0;
     pointerDown: bool = false;
-    // The pointer, up, is within reach of the waiting string.
+    // The real pointer, up, is within reach of the waiting string.
     near: bool = false;
 
     // The pluck shown.
     step: i32 = RESTING;
     stepTime: f64 = 0;
+    // Seconds this coming takes: from aside, or back for the next pluck.
+    comeTime: f64 = ENTER;
     // Plucks in this showing, and shown so far.
     plucks: i32 = 0;
     plucked: i32 = 0;
-    // How far aside the finger stood when the light took hold, and how far
-    // it pulls, in points.
+    // How far aside the string stood when the pointer took hold, how far it
+    // drags it, and how fast it was going as it let go, in points and
+    // points a second.
     pullFrom: f64 = 0;
     depth: f64 = 0;
+    carry: f64 = 0;
     // Seconds until the next showing, below 0 for none, and its plucks.
     startIn: f64 = FIRST_WAIT;
     startPlucks: i32 = 2;
@@ -116,14 +149,28 @@ export class Guide {
     // True once the first showing has run to its end.
     firstDone: bool = false;
 
-    // The light: where it is, how bright, and how it looks.
-    lightX: f64 = 0;
-    lightY: f64 = 0;
-    lightShown: f64 = 0;
-    lightGoal: f64 = 0;
-    lightFade: f64 = LIGHT_OUT;
-    // Drawn as the mark under a finger holding a string, not as a hover.
-    lightHolds: bool = false;
+    // The pointer: where its tip is, where its move began, how clearly it
+    // shows, and how far it is pressed in.
+    tipX: f64 = 0;
+    tipY: f64 = 0;
+    fromX: f64 = 0;
+    fromY: f64 = 0;
+    shown: f64 = 0;
+    shownGoal: f64 = 0;
+    shownFade: f64 = LEAVE;
+    press: f64 = 0;
+    pressGoal: f64 = 0;
+    // How near the coming pointer is to taking hold, 0 to 1, for the mark
+    // the string shows there.
+    hover: f64 = 0;
+    // The rings a click and a let go leave: where, and how long ago, below 0
+    // for none.
+    downX: f64 = 0;
+    downY: f64 = 0;
+    downAge: f64 = -1;
+    upX: f64 = 0;
+    upY: f64 = 0;
+    upAge: f64 = -1;
 
     // The line shown.
     lineStep: i32 = NO_LINE;
@@ -138,11 +185,16 @@ export class Guide {
     idleLines: i32 = 0;
 
     path: Path = new Path();
+    arrow: Path = new Path();
+    ring: Path = new Path();
     paint: Paint = new Paint();
+    fill: Paint = new Paint();
 
     constructor() {
         this.paint.style = PaintStyle.stroke;
         this.paint.cap = StrokeCap.round;
+        this.paint.join = StrokeJoin.round;
+        this.fill.style = PaintStyle.fill;
     }
 
     /// Lays the waiting string out for a scene this size. The scene may
@@ -165,8 +217,10 @@ export class Guide {
             if (this.step != RESTING) {
                 // A showing under way starts again on the new string.
                 this.step = RESTING;
-                this.lightShown = 0;
-                this.lightGoal = 0;
+                this.shown = 0;
+                this.shownGoal = 0;
+                this.press = 0;
+                this.pressGoal = 0;
                 this.startIn = 0.5;
                 this.startPlucks = this.firstDone ? 1 : 2;
             }
@@ -191,7 +245,8 @@ export class Guide {
         if (this.lineStep == DRAWING || this.lineStep == SHOWING) {
             this.lineStep = FADING;
             this.lineTime = 0;
-            this.lineFade = LIGHT_AWAY;
+            this.lineFade = POINTER_AWAY;
+            this.pressGoal = 0;
         }
     }
 
@@ -220,15 +275,17 @@ export class Guide {
         }
     }
 
-    /// The pointer moved while up. `near` is whether a press there would
-    /// take the waiting string.
+    /// The real pointer moved while up. `near` is whether a press there
+    /// would take the waiting string.
     hovering(near: bool): void {
         if (near && !this.near) {
             // Close enough to take it: a pluck being shown steps aside, and
-            // the mark the strings draw under the pointer says the rest. If
-            // the visitor does not take it, the pluck is shown again soon,
-            // there under the pointer. A showing already owed is kept.
-            let showing = this.step == COMING || this.step == PULLING || this.step == HOLDING;
+            // the mark the strings draw under the real pointer says the
+            // rest. If the visitor does not take it, the pluck is shown
+            // again soon, there under the pointer. A showing already owed is
+            // kept.
+            let showing = this.step == COMING || this.step == PRESSING || this.step == THROWING
+                || this.step == FOLLOWING || this.step == WAITING;
             if (showing) {
                 this.sendAway(true);
                 if (!this.rung && this.startIn < 0) {
@@ -240,7 +297,7 @@ export class Guide {
         this.near = near;
     }
 
-    /// The pointer left the scene.
+    /// The real pointer left the scene.
     left(): void {
         if (this.pointerDown && !this.rung) {
             this.missed();
@@ -258,17 +315,19 @@ export class Guide {
         }
     }
 
-    // Stops a pluck under way and lets the light go. Holding the string, it
-    // gives it back slowly, unless the visitor has just taken it over.
+    // Stops a pluck under way and sends the pointer away. Holding the
+    // string, it gives it back slowly, unless the visitor has just taken it.
     private sendAway(giveBack: bool): void {
-        if (this.step == PULLING || this.step == HOLDING) {
+        if (this.step == PRESSING || this.step == THROWING) {
             this.step = giveBack ? EASING : RESTING;
         } else if (this.step != EASING) {
             this.step = RESTING;
         }
         this.stepTime = 0;
-        this.lightGoal = 0;
-        this.lightFade = LIGHT_AWAY;
+        this.shownGoal = 0;
+        this.shownFade = POINTER_AWAY;
+        this.pressGoal = 0;
+        this.hover = 0;
     }
 
     advance(seconds: f64, strings: Strings): void {
@@ -280,13 +339,27 @@ export class Guide {
             this.line = null;
             line = null;
             this.step = RESTING;
-            this.lightGoal = 0;
+            this.shownGoal = 0;
+            this.shownFade = POINTER_AWAY;
             this.startIn = -1;
         }
-        if (this.lightGoal > this.lightShown) {
-            this.lightShown = Math.min(this.lightGoal, this.lightShown + dt / LIGHT_IN);
+        // The pointer comes up and goes, presses in and comes out, and the
+        // rings it leaves spread.
+        if (this.shownGoal > this.shown) {
+            this.shown = Math.min(this.shownGoal, this.shown + dt / POINTER_IN);
         } else {
-            this.lightShown = Math.max(this.lightGoal, this.lightShown - dt / this.lightFade);
+            this.shown = Math.max(this.shownGoal, this.shown - dt / this.shownFade);
+        }
+        if (this.pressGoal > this.press) {
+            this.press = Math.min(this.pressGoal, this.press + dt / CLICK);
+        } else {
+            this.press = Math.max(this.pressGoal, this.press - dt / CLICK);
+        }
+        if (this.downAge >= 0) {
+            this.downAge = this.downAge + dt > RING ? -1 : this.downAge + dt;
+        }
+        if (this.upAge >= 0) {
+            this.upAge = this.upAge + dt > RING ? -1 : this.upAge + dt;
         }
         if (line != null) {
             if (!this.rung && this.step == RESTING && !this.pointerDown) {
@@ -294,11 +367,11 @@ export class Guide {
                     this.startIn -= dt;
                     if (this.startIn <= 0) {
                         this.startIn = -1;
-                        this.begin(this.startPlucks);
+                        this.begin(this.startPlucks, line, strings);
                     }
                 } else if (this.idle >= IDLE_WAIT) {
                     this.idle = 0;
-                    this.begin(1);
+                    this.begin(1, line, strings);
                 }
             }
             this.movePluck(dt, line, strings);
@@ -306,11 +379,23 @@ export class Guide {
         this.moveLine(dt, strings);
     }
 
-    private begin(plucks: i32): void {
+    // Starts a showing of `plucks` plucks: the pointer appears below and to
+    // the right of where it will take hold.
+    private begin(plucks: i32, line: StringLine, strings: Strings): void {
+        let at = strings.pointOn(line, TAKE_AT);
         this.plucks = plucks;
         this.plucked = 0;
         this.step = COMING;
         this.stepTime = 0;
+        this.comeTime = ENTER;
+        this.fromX = <f64>at.x + ENTER_X;
+        this.fromY = <f64>at.y + ENTER_Y;
+        this.tipX = this.fromX;
+        this.tipY = this.fromY;
+        this.shown = 0;
+        this.shownGoal = 1;
+        this.press = 0;
+        this.pressGoal = 0;
     }
 
     // Moves a pluck shown on by `dt`, one step at most.
@@ -319,65 +404,114 @@ export class Guide {
             return;
         }
         this.stepTime += dt;
+        // Toward the side the string is dragged to.
+        let nx = -(line.by - line.ay) / line.length;
+        let ny = (line.bx - line.ax) / line.length;
         if (this.step == COMING) {
             if (line.heldPoint >= 0) {
                 // Someone else's finger is on it.
-                this.step = RESTING;
-                this.lightGoal = 0;
+                this.sendAway(true);
                 return;
             }
+            // Along a slight curve, quick to start and slow to arrive, as a
+            // hand aims a mouse; to the string where it stands now, so a
+            // string still ringing is caught where it is.
             let at = strings.pointOn(line, TAKE_AT);
-            let nx = -(line.by - line.ay) / line.length;
-            let ny = (line.bx - line.ax) / line.length;
-            let away = COME_FROM * (1 - smooth(this.stepTime / COME));
-            this.lightX = <f64>at.x + nx * away;
-            this.lightY = <f64>at.y + ny * away;
-            this.lightHolds = false;
-            this.lightGoal = 1;
-            if (this.stepTime >= COME) {
+            let gx = <f64>at.x;
+            let gy = <f64>at.y;
+            let t = Math.min(this.stepTime / this.comeTime, 1);
+            let e = this.comeTime == ENTER ? 1 - (1 - t) * (1 - t) * (1 - t) : smooth(t);
+            let mx = 0.5 * (this.fromX + gx) + 0.18 * (gy - this.fromY);
+            let my = 0.5 * (this.fromY + gy) - 0.18 * (gx - this.fromX);
+            let u = 1 - e;
+            this.tipX = u * u * this.fromX + 2 * u * e * mx + e * e * gx;
+            this.tipY = u * u * this.fromY + 2 * u * e * my + e * e * gy;
+            let dx = this.tipX - gx;
+            let dy = this.tipY - gy;
+            this.hover = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) / REACH);
+            if (this.stepTime >= this.comeTime) {
+                // The click: it takes hold where the string stands.
                 line.hold(TAKE_AT);
                 this.pullFrom = line.finger;
                 let share = this.plucks >= 2 ? (this.plucked == 0 ? LIGHT : HARD) : ONCE;
                 this.depth = share * line.length * PULL_LIMIT;
-                this.step = PULLING;
+                this.pressGoal = 1;
+                this.downX = gx;
+                this.downY = gy;
+                this.downAge = 0;
+                this.hover = 0;
+                this.step = PRESSING;
                 this.stepTime = 0;
             }
             return;
         }
-        if (this.step == PULLING || this.step == HOLDING) {
+        if (this.step == PRESSING || this.step == THROWING) {
             if (line.heldPoint < 0 || strings.held == line) {
+                // Taken over, or let go of by something else.
                 this.step = RESTING;
-                this.lightGoal = 0;
+                this.shownGoal = 0;
+                this.shownFade = POINTER_AWAY;
+                this.pressGoal = 0;
                 return;
             }
-            let t = this.step == PULLING ? smooth(this.stepTime / PULL) : 1.0;
-            line.fingerTarget = this.pullFrom + (this.depth - this.pullFrom) * t;
-            let at = strings.pointOn(line, line.heldAt);
-            this.lightX = <f64>at.x;
-            this.lightY = <f64>at.y;
-            this.lightHolds = true;
-            if (this.step == PULLING && this.stepTime >= PULL) {
-                this.step = HOLDING;
+            // Faster and faster, so it lets go at full speed. The pointer
+            // leads and the string follows it, as under a real one.
+            let u = this.step == THROWING ? Math.min(this.stepTime / THROW, 1) : 0.0;
+            line.fingerTarget = this.pullFrom + (this.depth - this.pullFrom) * u * u;
+            let along = line.heldAt;
+            this.tipX = line.ax + (line.bx - line.ax) * along + nx * line.fingerTarget;
+            this.tipY = line.ay + (line.by - line.ay) * along + ny * line.fingerTarget;
+            if (this.step == PRESSING && this.stepTime >= PRESS) {
+                this.step = THROWING;
                 this.stepTime = 0;
-            } else if (this.step == HOLDING && this.stepTime >= HOLD) {
+            } else if (this.step == THROWING && this.stepTime >= THROW) {
                 line.letGo();
                 this.plucked++;
-                this.step = RINGING;
+                this.carry = 2 * (this.depth - this.pullFrom) / THROW;
+                this.pressGoal = 0;
+                this.upX = this.tipX;
+                this.upY = this.tipY;
+                this.upAge = 0;
+                this.fromX = this.tipX;
+                this.fromY = this.tipY;
+                this.step = FOLLOWING;
                 this.stepTime = 0;
-                this.lightGoal = 0;
-                this.lightFade = LIGHT_OUT;
             }
             return;
         }
-        if (this.step == RINGING) {
-            if (this.stepTime >= CYCLE - COME - PULL - HOLD) {
+        if (this.step == FOLLOWING) {
+            let gone = this.carry * CARRY * (1 - Math.exp(-this.stepTime / CARRY));
+            this.tipX = this.fromX + nx * gone;
+            this.tipY = this.fromY + ny * gone;
+            if (this.stepTime >= FOLLOW) {
                 this.stepTime = 0;
+                this.fromX = this.tipX;
+                this.fromY = this.tipY;
                 if (this.plucked < this.plucks) {
-                    this.step = COMING;
+                    this.step = WAITING;
                 } else {
-                    this.step = RESTING;
-                    this.firstDone = true;
+                    this.step = LEAVING;
+                    this.shownGoal = 0;
+                    this.shownFade = LEAVE;
                 }
+            }
+            return;
+        }
+        if (this.step == WAITING) {
+            if (this.stepTime >= WAIT) {
+                this.comeTime = RETURN;
+                this.step = COMING;
+                this.stepTime = 0;
+            }
+            return;
+        }
+        if (this.step == LEAVING) {
+            let t = smooth(this.stepTime / LEAVE);
+            this.tipX = this.fromX + 10 * t;
+            this.tipY = this.fromY + 14 * t;
+            if (this.stepTime >= LEAVE) {
+                this.step = RESTING;
+                this.firstDone = true;
             }
             return;
         }
@@ -443,6 +577,7 @@ export class Guide {
         this.startLine(bestX - dx, bestY - dy, bestX + dx, bestY + dy);
     }
 
+    // The pointer clicks at the start and drags to the end.
     private startLine(x0: f64, y0: f64, x1: f64, y1: f64): void {
         this.x0 = x0;
         this.y0 = y0;
@@ -451,6 +586,14 @@ export class Guide {
         this.lineStep = DRAWING;
         this.lineTime = 0;
         this.lineShown = 0;
+        // Only one pointer is ever seen.
+        this.step = RESTING;
+        this.shown = 0;
+        this.shownGoal = 0;
+        this.pressGoal = 1;
+        this.downX = x0;
+        this.downY = y0;
+        this.downAge = 0;
     }
 
     // Moves a line shown on by `dt`, and starts one after a long wait.
@@ -469,12 +612,18 @@ export class Guide {
         if (this.drawn && this.lineStep != FADING) {
             this.lineStep = FADING;
             this.lineTime = 0;
-            this.lineFade = LIGHT_AWAY;
+            this.lineFade = POINTER_AWAY;
+            this.pressGoal = 0;
         }
         this.lineTime += dt;
         if (this.lineStep == DRAWING) {
-            this.lineShown = Math.min(1, this.lineShown + dt / LIGHT_IN);
+            this.lineShown = Math.min(1, this.lineShown + dt / POINTER_IN);
             if (this.lineTime >= DRAW) {
+                // Let go at the end of the line.
+                this.pressGoal = 0;
+                this.upX = this.x1;
+                this.upY = this.y1;
+                this.upAge = 0;
                 this.lineStep = SHOWING;
                 this.lineTime = 0;
             }
@@ -493,13 +642,15 @@ export class Guide {
     }
 
     draw(renderer: Renderer, strings: Strings): void {
-        let paint = this.paint;
+        this.drawRing(renderer, this.downX, this.downY, this.downAge, 1.0);
+        this.drawRing(renderer, this.upX, this.upY, this.upAge, 0.6);
         if (this.lineStep != NO_LINE && this.lineShown > 0.01) {
             let shown = smooth(this.lineShown);
             let reach = this.lineStep == DRAWING ? smooth(this.lineTime / DRAW) : 1.0;
             let ex = this.x0 + (this.x1 - this.x0) * reach;
             let ey = this.y0 + (this.y1 - this.y0) * reach;
             let path = this.path;
+            let paint = this.paint;
             path.reset();
             path.moveTo(Vector.xy(<f32>this.x0, <f32>this.y0));
             path.lineTo(Vector.xy(<f32>ex, <f32>ey));
@@ -507,31 +658,86 @@ export class Guide {
             paint.feather = 0;
             paint.color = Color.rgba(232, 242, 255, <i32>(110 * shown));
             renderer.drawPath(path, paint);
-            strings.drawDot(renderer, Vector.xy(<f32>ex, <f32>ey), 2.4 * shown,
-                Color.rgba(150, 205, 255, <i32>(110 * shown)),
-                Color.rgba(232, 242, 255, <i32>(200 * shown)));
+            this.drawPointer(renderer, ex, ey, shown);
+            return;
         }
-        let shown = smooth(this.lightShown);
+        let shown = smooth(this.shown);
         if (shown <= 0.01) {
             return;
         }
-        // The marks the strings draw under a real pointer, with a wide, faint
-        // glow around them like a fingertip's, so the light reads as
-        // something touching the string, not as part of it.
-        let at = Vector.xy(<f32>this.lightX, <f32>this.lightY);
         let line = this.line;
-        if (this.lightHolds && line != null) {
-            let heat = inkColor(0.15 + 0.7 * line.tension);
-            strings.drawDot(renderer, at, FINGERTIP, withAlpha(heat, <i32>(45 * shown)), Color.rgba(0, 0, 0, 0));
-            strings.drawDot(renderer, at, 3.4 + 1.5 * line.tension,
-                withAlpha(heat, <i32>(160 * shown)),
-                Color.rgba(255, 252, 245, <i32>(255 * shown)));
-        } else {
-            strings.drawDot(renderer, at, FINGERTIP, Color.rgba(150, 205, 255, <i32>(45 * shown)), Color.rgba(0, 0, 0, 0));
-            strings.drawDot(renderer, at, 3.2 * shown,
-                Color.rgba(150, 205, 255, <i32>(130 * shown)),
-                Color.rgba(232, 242, 255, <i32>(220 * shown)));
+        if (line != null) {
+            if (this.step == COMING && this.hover > 0.01) {
+                // Where it would take hold, as the string marks it under a
+                // real pointer.
+                let h = this.hover * shown;
+                strings.drawDot(renderer, strings.pointOn(line, TAKE_AT), 2.4 * h,
+                    Color.rgba(150, 205, 255, <i32>(110 * h)),
+                    Color.rgba(232, 242, 255, <i32>(200 * h)));
+            }
+            if ((this.step == PRESSING || this.step == THROWING || this.step == EASING)
+                && line.heldPoint >= 0) {
+                // Under the pointer, the point it holds the string by.
+                let heat = inkColor(0.15 + 0.7 * line.tension);
+                strings.drawDot(renderer, strings.pointOn(line, line.heldAt), 3 + 1.5 * line.tension,
+                    withAlpha(heat, <i32>(150 * shown)),
+                    Color.rgba(255, 252, 245, <i32>(255 * shown)));
+            }
         }
+        this.drawPointer(renderer, this.tipX, this.tipY, shown);
+    }
+
+    // The arrow, its tip at (x, y): white with a dark edge as a mouse
+    // pointer is, with a faint blue glow so it reads as no one's own, a
+    // little smaller while pressed.
+    private drawPointer(renderer: Renderer, x: f64, y: f64, alpha: f64): void {
+        let size = 1 - PRESSED * smooth(this.press);
+        let arrow = this.arrow;
+        arrow.reset();
+        for (let i = 0; i < ARROW_X.length; i++) {
+            let at = Vector.xy(<f32>(x + ARROW_X[i] * size), <f32>(y + ARROW_Y[i] * size));
+            if (i == 0) {
+                arrow.moveTo(at);
+            } else {
+                arrow.lineTo(at);
+            }
+        }
+        arrow.close();
+        let fill = this.fill;
+        fill.feather = 10;
+        fill.color = Color.rgba(150, 205, 255, <i32>(80 * alpha));
+        renderer.drawPath(arrow, fill);
+        fill.feather = 0;
+        fill.color = Color.rgba(246, 249, 255, <i32>(240 * alpha));
+        renderer.drawPath(arrow, fill);
+        let paint = this.paint;
+        paint.thickness = 1.1;
+        paint.feather = 0;
+        paint.color = Color.rgba(6, 9, 15, <i32>(220 * alpha));
+        renderer.drawPath(arrow, paint);
+    }
+
+    // The ring a click or a let go leaves, spreading and fading.
+    private drawRing(renderer: Renderer, x: f64, y: f64, age: f64, strength: f64): void {
+        if (age < 0) {
+            return;
+        }
+        let t = Math.min(age / RING, 1);
+        let r = 4 + 14 * smooth(t);
+        let k = KAPPA * r;
+        let ring = this.ring;
+        ring.reset();
+        ring.moveTo(Vector.xy(<f32>(x + r), <f32>y));
+        ring.cubicTo(Vector.xy(<f32>(x + r), <f32>(y + k)), Vector.xy(<f32>(x + k), <f32>(y + r)), Vector.xy(<f32>x, <f32>(y + r)));
+        ring.cubicTo(Vector.xy(<f32>(x - k), <f32>(y + r)), Vector.xy(<f32>(x - r), <f32>(y + k)), Vector.xy(<f32>(x - r), <f32>y));
+        ring.cubicTo(Vector.xy(<f32>(x - r), <f32>(y - k)), Vector.xy(<f32>(x - k), <f32>(y - r)), Vector.xy(<f32>x, <f32>(y - r)));
+        ring.cubicTo(Vector.xy(<f32>(x + k), <f32>(y - r)), Vector.xy(<f32>(x + r), <f32>(y - k)), Vector.xy(<f32>(x + r), <f32>y));
+        ring.close();
+        let paint = this.paint;
+        paint.thickness = 1.5;
+        paint.feather = 0;
+        paint.color = Color.rgba(220, 235, 255, <i32>(210 * strength * (1 - t)));
+        renderer.drawPath(ring, paint);
     }
 }
 
