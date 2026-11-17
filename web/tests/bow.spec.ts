@@ -178,17 +178,25 @@ test("a touch stroke keeps its first finger and cancels without a stuck note", a
   await expect(page.locator("#selection")).toContainText("전체 4개");
   const cdp = await context.newCDPSession(page);
   const finger = (id: number, x: number) => ({ id, x, y: 230, radiusX: 4, radiusY: 4, force: 0.5 });
+  // One move produces a short pulse. Default backoff can skip the entire
+  // pulse, especially when the signed file's splash delays its first frame.
+  const waitForSound = () => expect.poll(() => page.locator("#bow-studio").getAttribute("data-sounding"),
+    { intervals: [20] }).toBe("true");
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [finger(0, 153)] });
   await expect(page.locator("#stage")).toHaveCSS("cursor", "grabbing");
   await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [finger(0, 175)] });
-  await expect(page.locator("#bow-studio")).toHaveAttribute("data-sounding", "true");
+  await waitForSound();
   await expect(page.locator("#bow-note")).toHaveText("D4");
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [finger(0, 175), finger(1, 260)] });
   await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [finger(0, 185), finger(1, 290)] });
   await expect(page.locator("#bow-note")).toHaveText("D4");
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [finger(0, 185)] });
+  // CDP's nonempty touchEnd list names the lifted finger, not the one kept.
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [finger(1, 290)] });
+  await expect(page.locator("#stage")).toHaveCSS("cursor", "grabbing");
+  await expect(page.locator("#bow-studio")).toHaveAttribute("data-sounding", "false");
   await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [finger(0, 155)] });
-  await expect(page.locator("#bow-studio")).toHaveAttribute("data-sounding", "true");
+  await waitForSound();
+  await expect(page.locator("#bow-direction")).toHaveAttribute("data-direction", "forward");
   await expect(page.locator("#bow-note")).toHaveText("D4");
   await cdp.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
   await expect(page.locator("#bow-studio")).toHaveAttribute("data-sounding", "false");

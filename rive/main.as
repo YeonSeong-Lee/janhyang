@@ -92,7 +92,7 @@ export class Main extends Layout {
     override advance(seconds: f64): bool {
         this.syncControls();
         let stroke = this.strokeLine;
-        if (stroke != null) {
+        if (stroke != null && seconds > 0) {
             // Bound physics catch-up separately from the gesture's lifetime.
             // A slow renderer must not stretch a 1.25-second stroke to seconds
             // of extra sound by discarding elapsed time on each frame.
@@ -113,6 +113,15 @@ export class Main extends Layout {
                 this.sendBowNotes();
             }
         }
+        this.publishGesture();
+        this.strings.advance(seconds);
+        if (!this.bowMode) this.guide.advance(seconds, this.strings);
+        this.pending = Math.min(this.pending + seconds, MAX_CATCH_UP);
+
+        return true;
+    }
+
+    private publishGesture(): void {
         let contacts = this.contactsProperty;
         if (contacts != null && contacts.value != this.bow.contacts) contacts.value = this.bow.contacts;
         let level = this.levelProperty;
@@ -120,11 +129,6 @@ export class Main extends Layout {
         let rounded = Math.round(this.bow.level * 20) / 20;
         if (level != null && level.value != rounded) level.value = rounded;
         if (direction != null && direction.value != this.bow.direction) direction.value = this.bow.direction;
-        this.strings.advance(seconds);
-        if (!this.bowMode) this.guide.advance(seconds, this.strings);
-        this.pending = Math.min(this.pending + seconds, MAX_CATCH_UP);
-
-        return true;
     }
 
     private syncControls(): void {
@@ -206,6 +210,7 @@ export class Main extends Layout {
         this.sendBowNotes();
         this.guide.left();
         this.setCursor(this.bowMode ? "grab" : "crosshair");
+        this.publishGesture();
     }
 
     // Starts the sound, or starts it again after it failed. It waits for a
@@ -369,7 +374,16 @@ export class Main extends Layout {
         this.bow.dy = dy;
         this.bow.focused = line;
         this.strokeLine = line;
+        // Start the first small movement with the command itself. Otherwise
+        // a frame longer than the stroke can skip straight from press to end
+        // without ever sending an audible note.
+        let firstStep = this.bow.halfLength / (1.25 * 60);
+        this.bow.move(at.x - dx * this.bow.halfLength * 0.5 + dx * firstStep,
+            at.y - dy * this.bow.halfLength * 0.5 + dy * firstStep, this.strings);
+        this.bow.advance(1.0 / 60, this.strings);
+        this.sendBowNotes();
         this.setCursor("grabbing");
+        this.publishGesture();
     }
 
     @input practiceStrings(): void {
