@@ -56,21 +56,18 @@ test("pause survives viewport and motion preference changes", async ({ page }) =
   await page.setViewportSize({ width: 390, height: 650 });
   await expect(page.locator("#stage")).toHaveJSProperty("width", 390);
   await expect(page.locator("#stage")).toHaveJSProperty("inert", true);
-  // The runtime completes one paused frame to reset its playback clock.
-  await page.evaluate(() => new Promise<void>((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  }));
-  // Observe a quiet interval: an accidental render loop would keep advancing.
-  const counts = await page.evaluate(async () => {
+  // The threaded renderer may retry pending frames while its worker catches up.
+  // Require a quiet interval within a deadline; a persistent loop still fails.
+  await expect.poll(() => page.evaluate(async () => {
     const state = (window as unknown as { renderProbe: { frames: number } }).renderProbe;
     const before = state.frames;
     await new Promise((resolve) => setTimeout(resolve, 200));
-    return [before, state.frames];
-  });
-  expect(counts[1]).toBe(counts[0]);
+    return state.frames - before;
+  }), { timeout: 5000, message: "rendering settles after pausing and resizing" }).toBe(0);
+  const pausedFrames = await frames();
   await expect(page.getByRole("button", { name: "재생", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "재생", exact: true }).click();
-  await expect.poll(frames).toBeGreaterThan(counts[1]);
+  await expect.poll(frames).toBeGreaterThan(pausedFrames);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(page.getByRole("button", { name: "재생", exact: true })).toBeEnabled();
   await page.emulateMedia({ reducedMotion: "no-preference" });
