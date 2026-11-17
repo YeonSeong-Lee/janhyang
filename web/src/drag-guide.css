@@ -1,0 +1,29 @@
+/* Light on the water, visible only while the hand is working. */
+#drag-guide {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 220ms ease-out;
+}
+#drag-guide[data-visible="true"] { opacity: 1; transition-duration: 120ms; }
+.drag-guide-marks { position: absolute; inset: 0; overflow: hidden; }
+#guide-line { stroke: #b9dfff; stroke-width: 1; stroke-opacity: .28; stroke-dasharray: 2 6; }
+#guide-target { fill: #b9dfff; fill-opacity: .06; stroke: #b9dfff; stroke-width: 1; stroke-opacity: .55; }
+#drag-guide[data-aligned="true"] #guide-target { fill-opacity: .18; stroke-opacity: .85; }
+#drag-guide:not([data-target="true"]) .drag-guide-marks { visibility: hidden; }
+#drag-caption {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: max-content;
+  max-width: min(224px, calc(100vw - 32px));
+  text-shadow: 0 1px 10px #05070b, 0 1px 3px #05070b;
+}
+#drag-note { display: block; margin-bottom: 4px; color: #b9dfff; font-size: 12px; letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+#drag-note:empty { display: none; }
+#gesture-hint { margin: 0; color: #cbd9e9; font-size: 13px; line-height: 1.6; word-break: keep-all; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) {
+  #drag-guide, #drag-guide[data-visible="true"] { transition: none; }
+}

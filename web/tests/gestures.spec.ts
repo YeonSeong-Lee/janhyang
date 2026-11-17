@@ -18,14 +18,16 @@ test("a string advertises grab, confirms the hold and releases it", async ({ pag
   const canvas = page.locator("#stage");
   await page.mouse.move(300, 200);
   await expect(canvas).toHaveCSS("cursor", "grab");
-  await expect(page.locator("#gesture-hint")).toContainText("누른 채 당기세요");
+  await expect(page.locator("#drag-guide")).toHaveCSS("opacity", "0");
   await page.mouse.down();
   await expect(canvas).toHaveCSS("cursor", "grabbing");
   await page.mouse.move(300, 260, { steps: 8 });
-  await expect(page.locator("#gesture-hint")).toContainText("현을 잡았어요");
+  await expect(page.locator("#drag-guide")).toHaveAttribute("data-visible", "true");
+  await expect(page.locator("#gesture-hint")).toContainText("당겼다가 놓아보세요");
   await page.mouse.up();
   await page.mouse.move(50, 500);
   await expect(canvas).toHaveCSS("cursor", "crosshair");
+  await expect(page.locator("#drag-guide")).toHaveCSS("opacity", "0");
   await page.locator("summary").click();
   await expect(page.locator("#selection")).toContainText("전체 1개");
 });

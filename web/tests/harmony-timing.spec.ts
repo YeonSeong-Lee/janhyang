@@ -8,6 +8,7 @@ test("a render-time gap ends the phrase without replaying stale notes", async ({
     window.requestAnimationFrame = (callback) => request((time) => callback(clock.frozenTime ?? time));
   });
   await page.goto("/");
+  await page.locator("summary").click();
   await page.getByRole("button", { name: "어울리는 현 3개 놓기" }).click();
   const demo = page.locator("#harmony-demo");
   await demo.click();

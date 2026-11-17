@@ -70,13 +70,6 @@
       button:not([aria-disabled="true"]):active, summary:active { background: #263b53; color: #fff; }
       details { min-width: 0; max-width: 32rem; max-height: 70dvh; overflow: auto; overscroll-behavior: contain; }
       details[open] { flex-basis: 100%; order: -1; }
-      #gesture-hint {
-        position: fixed; inset-block-start: max(18px, env(safe-area-inset-top));
-        inset-inline: 20px; width: fit-content; max-width: calc(100% - 40px);
-        margin: 0 auto; padding: 8px 12px; border-radius: 20px;
-        color: #cbd9e9; background: #0b1019e6; font-size: 14px; line-height: 1.6;
-        text-align: center; pointer-events: none; word-break: keep-all; overflow-wrap: anywhere;
-      }
       @media (max-width: 480px) {
         .controls { gap: 6px; }
         .controls > button, summary { padding-inline: 10px; font-size: 14px; }
@@ -117,7 +110,16 @@
       <canvas id="stage" width="1280" height="720" role="img" aria-label="현과 파문으로 연주하는 수면" aria-describedby="instructions">
         수면에 선을 그어 현을 만들고, 당겼다 놓아 소리와 파문을 만드는 작품입니다.
       </canvas>
-      <p id="gesture-hint" hidden>빈 곳을 드래그해 현을 만드세요</p>
+      <div id="drag-guide" data-visible="false" aria-hidden="true">
+        <svg class="drag-guide-marks" width="100%" height="100%">
+          <line id="guide-line" />
+          <circle id="guide-target" r="6" />
+        </svg>
+        <div id="drag-caption">
+          <span id="drag-note"></span>
+          <p id="gesture-hint"></p>
+        </div>
+      </div>
       <div id="notice">
         <p id="status" role="status" aria-live="polite" aria-atomic="true"></p>
         <button id="retry" type="button" hidden>다시 불러오기</button>
@@ -126,9 +128,31 @@
         <button id="playback" type="button" aria-controls="stage" hidden>재생</button>
         <details>
           <summary>사용 안내</summary>
-          <p id="instructions">빈 수면을 마우스나 손가락으로 드래그해 현을 만드세요. 길게 그리면 낮은 음, 짧게 그리면 높은 음이 됩니다. 선택한 분위기의 화음에 맞춰 음높이를 조율합니다. 분위기를 바꾸면 기존 현도 함께 조율됩니다. 만든 현을 옆으로 당겼다 놓으면 소리와 파문이 퍼집니다.</p>
-          <p>‘어울리는 현 3개 놓기’로 시작하거나 직접 그려보세요. ‘짧은 연주 듣기’는 지금 만든 현으로 약 5초간 연주합니다. 수면을 누르거나 Esc를 누르면 멈춥니다. 키보드나 클릭만으로 연주하려면 아래 버튼을 사용하세요.</p>
-          <p>일시정지를 누르면 움직임과 소리가 멈춥니다. 움직임 줄이기 설정을 사용 중이면 재생을 눌러 시작할 수 있습니다.</p>
+          <p id="instructions">빈 수면을 드래그해 현을 만들고, 만든 현을 옆으로 당겼다 놓아보세요. 긴 현은 낮게, 짧은 현은 높게 울립니다. 그리는 손 옆에 어울리는 음과 길이가 희미하게 나타납니다.</p>
+          <section id="harmony-panel" aria-labelledby="harmony-title">
+            <div class="harmony-heading">
+              <h2 id="harmony-title">어울리는 소리로 <span id="harmony-chord">Am</span></h2>
+            </div>
+            <div class="harmony-tuning">
+              <label for="harmony-mood">소리 분위기</label>
+              <select id="harmony-mood" aria-describedby="harmony-description" autocomplete="off">
+                <option value="0">차분하게</option>
+                <option value="1">맑게</option>
+                <option value="2">따뜻하게</option>
+              </select>
+              <div id="harmony-notes" aria-label="어울리는 음"></div>
+              <span id="harmony-note" aria-label="현재 음">—</span>
+            </div>
+            <p id="harmony-description">라·도·미가 차분하게 어울려요.</p>
+            <div class="harmony-actions">
+              <button id="harmony-seed" type="button" aria-disabled="true">어울리는 현 3개 놓기</button>
+              <button id="harmony-pluck" type="button" aria-disabled="true" hidden>이 현 들어보기</button>
+              <button id="harmony-demo" type="button" aria-disabled="true" aria-pressed="false">짧은 연주 듣기</button>
+            </div>
+            <p id="harmony-feedback" aria-live="polite" aria-atomic="true">자유롭게 그려도 어울리는 음으로 맞춰져요.</p>
+          </section>
+          <p>분위기를 바꾸면 기존 현도 함께 조율됩니다. ‘짧은 연주 듣기’는 지금 만든 현으로 약 5초간 연주합니다. 수면을 누르거나 Esc를 누르면 멈춥니다.</p>
+          <p>일시정지를 누르면 움직임과 소리가 멈춥니다. 움직임 줄이기 설정에서는 재생을 눌러 시작하세요. 키보드나 클릭으로 연주하려면 아래 버튼을 사용하세요.</p>
           <fieldset id="instrument-controls" aria-describedby="instrument-hint" hidden>
             <legend>버튼으로 연주</legend>
             <div class="instrument-fields">
@@ -156,31 +180,6 @@
           </fieldset>
         </details>
       </div>
-      <section id="harmony-panel" aria-labelledby="harmony-title" hidden>
-        <div class="harmony-heading">
-          <h2 id="harmony-title">어울리는 소리로 <span id="harmony-chord">Am</span></h2>
-          <button id="harmony-toggle" type="button" aria-expanded="true" aria-controls="harmony-body">접기</button>
-        </div>
-        <div id="harmony-body">
-          <div class="harmony-tuning">
-            <label class="visually-hidden" for="harmony-mood">소리 분위기</label>
-            <select id="harmony-mood" aria-describedby="harmony-description" autocomplete="off">
-              <option value="0">차분하게</option>
-              <option value="1">맑게</option>
-              <option value="2">따뜻하게</option>
-            </select>
-            <div id="harmony-notes" aria-label="어울리는 음"></div>
-            <span id="harmony-note" aria-label="현재 음">—</span>
-          </div>
-          <p id="harmony-description">라·도·미가 차분하게 어울려요.</p>
-          <div class="harmony-actions">
-            <button id="harmony-seed" type="button" aria-disabled="true">어울리는 현 3개 놓기</button>
-            <button id="harmony-pluck" type="button" aria-disabled="true" hidden>이 현 들어보기</button>
-            <button id="harmony-demo" type="button" aria-disabled="true" aria-pressed="false">짧은 연주 듣기</button>
-          </div>
-          <p id="harmony-feedback" aria-live="polite" aria-atomic="true">자유롭게 그려도 어울리는 음으로 맞춰져요.</p>
-        </div>
-      </section>
       <pre id="report" role="region" aria-label="진단 정보" tabindex="0" hidden></pre>
       <noscript><p class="message">잔향은 JavaScript로 소리와 파문을 만듭니다. 브라우저에서 JavaScript를 켜고 다시 열어 주세요.</p></noscript>
     </main>

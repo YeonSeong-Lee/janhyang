@@ -8,17 +8,24 @@ async function ready(page: Page): Promise<void> {
 
 test("a drawn string commits the live tuned note, while short strokes and Escape do not create", async ({ page }) => {
   await ready(page);
+  await page.locator("summary").click();
   await page.getByLabel("소리 분위기").selectOption("1");
+  await page.locator("summary").click();
+  const guide = page.locator("#drag-guide");
+  await expect(page.locator("#harmony-panel")).toBeHidden();
+  await expect(guide).toHaveCSS("opacity", "0");
   await page.mouse.move(60, 120);
   await page.mouse.down();
   await page.mouse.move(80, 120);
-  await expect(page.locator("#harmony-feedback")).toContainText("조금 더 길게");
+  await expect(guide).toHaveAttribute("data-visible", "true");
+  await expect(page.locator("#gesture-hint")).toContainText("조금 더 길게");
   await page.mouse.move(330, 120, { steps: 10 });
-  await expect(page.locator("#harmony-feedback")).toContainText("맞춰졌어요");
-  await expect(page.locator("#harmony-note")).toHaveText("C5");
-  const preview = await page.locator("#harmony-note").textContent();
+  await expect(page.locator("#gesture-hint")).toContainText("놓으면 이 음");
+  await expect(page.locator("#drag-note")).toHaveText("C5");
+  const preview = await page.locator("#drag-note").textContent();
   expect(preview).toMatch(/^[CEG][3-5]$/);
   await page.mouse.up();
+  await expect(guide).toHaveCSS("opacity", "0");
   await expect(page.locator("#selection")).toContainText(`전체 1개 중 1번째 현 · ${preview}`);
   await expect(page.locator("#harmony-notes [data-active=true]")).toHaveCount(1);
   await page.mouse.move(60, 210);
@@ -29,15 +36,16 @@ test("a drawn string commits the live tuned note, while short strokes and Escape
   await page.mouse.move(60, 290);
   await page.mouse.down();
   await page.mouse.move(330, 290, { steps: 10 });
-  await expect(page.locator("#harmony-panel")).toHaveAttribute("data-drawing", "true");
+  await expect(guide).toHaveAttribute("data-visible", "true");
   await page.keyboard.press("Escape");
   await page.mouse.up();
-  await expect(page.locator("#harmony-panel")).toHaveAttribute("data-drawing", "false");
+  await expect(guide).toHaveCSS("opacity", "0");
   await expect(page.locator("#selection")).toContainText("전체 1개");
 });
 
 test("starter provides three tuned strings and mood changes retune the existing instrument", async ({ page }) => {
   await ready(page);
+  await page.locator("summary").click();
   const seed = page.getByRole("button", { name: "어울리는 현 3개 놓기" });
   await seed.focus();
   await page.keyboard.press("Enter");
@@ -57,6 +65,7 @@ test("starter provides three tuned strings and mood changes retune the existing 
 
 test("the phrase finishes on its own", async ({ page }) => {
   await ready(page);
+  await page.locator("summary").click();
   await page.getByRole("button", { name: "어울리는 현 3개 놓기" }).click();
   const demo = page.locator("#harmony-demo");
   await demo.click();
@@ -67,6 +76,7 @@ test("the phrase finishes on its own", async ({ page }) => {
 
 test("the phrase restarts after Escape and direct interaction cancels it", async ({ page }) => {
   await ready(page);
+  await page.locator("summary").click();
   await page.getByRole("button", { name: "어울리는 현 3개 놓기" }).click();
   const demo = page.locator("#harmony-demo");
   await demo.click();
@@ -81,6 +91,7 @@ test("the phrase restarts after Escape and direct interaction cancels it", async
 
 test("pause cancels the phrase and resume does not restart it", async ({ page }) => {
   await ready(page);
+  await page.locator("summary").click();
   await page.getByRole("button", { name: "어울리는 현 3개 놓기" }).click();
   const demo = page.locator("#harmony-demo");
   await demo.click();
@@ -96,11 +107,14 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 320, height: 568 
   test(`harmony controls and starter strings are reachable at ${viewport.width} × ${viewport.height}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
     await ready(page);
+    await page.locator("summary").click();
     const accessibility = await new AxeBuilder({ page }).analyze();
     expect(accessibility.violations).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
-    for (const id of ["harmony-mood", "harmony-toggle", "harmony-seed", "harmony-demo"]) {
-      const bounds = await page.locator(`#${id}`).boundingBox();
+    for (const id of ["harmony-mood", "harmony-seed", "harmony-demo"]) {
+      const control = page.locator(`#${id}`);
+      await control.scrollIntoViewIfNeeded();
+      const bounds = await control.boundingBox();
       expect(bounds!.height).toBeGreaterThanOrEqual(44);
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
@@ -109,6 +123,8 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 320, height: 568 
     }
     await page.getByRole("button", { name: "어울리는 현 3개 놓기" }).click();
     await expect(page.locator("#selection")).toContainText("전체 3개");
+    await page.locator("summary").click();
+    await expect(page.locator("#harmony-panel")).toBeHidden();
     const landscape = viewport.width >= 600 && viewport.height <= 500;
     const x = (landscape ? viewport.width - 368 : viewport.width) / 2;
     const bottom = landscape ? viewport.height - 76 : Math.max(184, Math.min(viewport.height * 0.48, viewport.height - 340));
@@ -125,9 +141,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 320, height: 568 
     // review image; all interaction assertions above wait on actual state.
     await page.waitForTimeout(3000);
     await page.screenshot({ path: testInfo.outputPath("harmony.png") });
-    await page.getByRole("button", { name: "접기", exact: true }).click();
-    await expect(page.locator("#harmony-body")).toBeHidden();
-    await page.getByRole("button", { name: "펼치기", exact: true }).click();
-    await expect(page.locator("#harmony-body")).toBeVisible();
+    await page.locator("summary").click();
+    await expect(page.locator("#harmony-panel")).toBeVisible();
   });
 }

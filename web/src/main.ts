@@ -1,6 +1,7 @@
 import { prepareIsolation } from "./isolation";
 import type { GestureState, InstrumentState, Player } from "./player";
 import { harmonies, midiOf, noteName } from "./harmony";
+import { createDragGuide } from "./drag-guide";
 import "./harmony.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#stage")!;
@@ -8,7 +9,6 @@ const report = document.querySelector<HTMLPreElement>("#report")!;
 const notice = document.querySelector<HTMLDivElement>("#notice")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const playback = document.querySelector<HTMLButtonElement>("#playback")!;
-const gestureHint = document.querySelector<HTMLParagraphElement>("#gesture-hint")!;
 const retry = document.querySelector<HTMLButtonElement>("#retry")!;
 const instrumentControls = document.querySelector<HTMLFieldSetElement>("#instrument-controls")!;
 const instrumentHint = document.querySelector<HTMLParagraphElement>("#instrument-hint")!;
@@ -19,9 +19,6 @@ const createString = document.querySelector<HTMLButtonElement>("#create-string")
 const previousString = document.querySelector<HTMLButtonElement>("#previous-string")!;
 const nextString = document.querySelector<HTMLButtonElement>("#next-string")!;
 const pluckString = document.querySelector<HTMLButtonElement>("#pluck-string")!;
-const harmonyPanel = document.querySelector<HTMLElement>("#harmony-panel")!;
-const harmonyBody = document.querySelector<HTMLElement>("#harmony-body")!;
-const harmonyToggle = document.querySelector<HTMLButtonElement>("#harmony-toggle")!;
 const harmonyMood = document.querySelector<HTMLSelectElement>("#harmony-mood")!;
 const harmonyChord = document.querySelector<HTMLElement>("#harmony-chord")!;
 const harmonyNotes = document.querySelector<HTMLElement>("#harmony-notes")!;
@@ -45,14 +42,13 @@ let paused = motion.matches;
 let loading = false;
 let failed = false;
 let disposed = false;
-let gestureCursor = "crosshair";
 let instrument: InstrumentState = { count: 0, selected: 0, frequency: 0, notesPlayed: 0, demoPlaying: false };
 let gesture: GestureState = { cursor: "crosshair", drawing: false, previewFrequency: 0 };
 let harmonyIndex = 0;
+const dragGuide = createDragGuide(canvas, () => canPlayInstrument() && !help.open);
 
 function updateHarmony(): void {
   const ready = canPlayInstrument();
-  harmonyPanel.hidden = help.open;
   harmonyMood.disabled = !ready;
   harmonySeed.hidden = instrument.count > 0;
   harmonyPluck.hidden = instrument.count === 0;
@@ -62,7 +58,6 @@ function updateHarmony(): void {
   const demo = ready && instrument.demoPlaying;
   harmonyDemo.setAttribute("aria-pressed", String(demo));
   harmonyDemo.textContent = demo ? "예시 연주 멈추기" : "짧은 연주 듣기";
-  harmonyPanel.dataset.drawing = String(ready && gesture.drawing);
   const frequency = gesture.drawing ? gesture.previewFrequency : instrument.frequency;
   const name = noteName(frequency);
   harmonyNote.textContent = name;
@@ -126,7 +121,7 @@ function updateInstrumentControls(): void {
     : loading ? "수면을 준비하고 있습니다…"
     : !ready ? "재생을 누른 뒤 현을 만들고 연주할 수 있습니다."
     : "Tab으로 이동하고 Enter 또는 Space로 버튼을 누르세요. 선택한 현에는 밝은 점이 표시됩니다.";
-  updateGestureHint();
+  if (!ready || help.open) dragGuide.cancel();
   updateHarmony();
 }
 
@@ -147,22 +142,12 @@ function updatePlayback(): void {
   playback.setAttribute("aria-disabled", String(loading));
   playback.textContent = loading ? "준비 중…" : paused ? "재생" : "일시정지";
   canvas.inert = paused || loading || failed;
-  updateGestureHint();
   updateInstrumentControls();
-}
-
-function updateGestureHint(): void {
-  gestureHint.hidden = !canPlayInstrument();
-  gestureHint.textContent = gestureCursor === "grabbing" ? "현을 잡았어요 · 당겼다가 놓으세요"
-    : gestureCursor === "grab" ? "현을 잡으려면 누른 채 당기세요"
-    : gesture.drawing ? gesture.previewFrequency > 0 ? `${noteName(gesture.previewFrequency)} · 손을 놓으면 현이 완성돼요` : "조금 더 길게 그어보세요"
-    : "빈 곳을 드래그해 현을 만드세요";
 }
 
 function updateGesture(state: GestureState): void {
   gesture = state;
-  gestureCursor = state.cursor;
-  updateGestureHint();
+  dragGuide.update(state);
   updateHarmony();
 }
 
@@ -244,17 +229,18 @@ harmonyPluck.addEventListener("click", () => {
 harmonyDemo.addEventListener("click", () => {
   if (canPlayInstrument() && instrument.count > 0) player!.playPhrase();
 }, { signal: events.signal });
-harmonyToggle.addEventListener("click", () => {
-  const collapsed = !harmonyBody.hidden;
-  harmonyBody.hidden = collapsed;
-  harmonyPanel.dataset.collapsed = String(collapsed);
-  harmonyToggle.textContent = collapsed ? "펼치기" : "접기";
-  harmonyToggle.setAttribute("aria-expanded", String(!collapsed));
+help.addEventListener("toggle", () => {
+  if (help.open) {
+    dragGuide.cancel();
+    player?.stopGesture();
+  }
 }, { signal: events.signal });
-help.addEventListener("toggle", updateHarmony, { signal: events.signal });
 
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && canPlayInstrument()) player!.stopGesture();
+  if (event.key === "Escape" && canPlayInstrument()) {
+    dragGuide.cancel();
+    player!.stopGesture();
+  }
 }, { signal: events.signal });
 
 createString.addEventListener("click", () => {
@@ -286,6 +272,7 @@ window.addEventListener("unhandledrejection", (event) => note(`rejection: ${Stri
 function cleanup(): void {
   disposed = true;
   events.abort();
+  dragGuide.cleanup();
   player?.cleanup();
 }
 
