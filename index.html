@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <title>잔향</title>
+    <style>html,body{background:#05070b;height:100%;margin:0;overflow:hidden}#stage{touch-action:none;width:100vw;height:100dvh;display:block}#report{box-sizing:border-box;color:#c9d4e3;white-space:pre-wrap;pointer-events:none;background:#05070bcc;border:1px solid #1c2531;border-radius:6px;max-width:calc(100vw - 24px);margin:0;padding:8px 10px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;position:fixed;bottom:12px;left:12px}#report[hidden]{display:none}</style>
+    <script type="module" crossorigin src="./assets/index-BoxdvMV-.js"></script>
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+    <pre id="report" hidden></pre>
+    <script>
+      // Without isolation headers from the server, install the worker that
+      // adds them and load once more under it. Reload only once, so a
+      // browser that refuses service workers still gets the page.
+      if (!window.crossOriginIsolated && "serviceWorker" in navigator
+          && !sessionStorage.getItem("coi-reloaded")) {
+        navigator.serviceWorker.register("./coi.js").then((registration) => {
+          const reload = () => {
+            try { sessionStorage.setItem("coi-reloaded", "1"); } catch {}
+            location.reload();
+          };
+          if (registration.active && !navigator.serviceWorker.controller) reload();
+          else navigator.serviceWorker.addEventListener("controllerchange", reload);
+        });
+      }
+    </script>
+  </body>
+</html>
