@@ -55,7 +55,7 @@ test("starter provides three tuned strings and mood changes retune the existing 
   await expect(page.locator("#selection")).toContainText("선택한 현을 튕겼습니다");
 });
 
-test("the phrase finishes, and direct interaction, Escape and pause cancel it", async ({ page }) => {
+test("the phrase finishes on its own", async ({ page }) => {
   await ready(page);
   await page.getByRole("button", { name: "어울리는 현 3개 놓기" }).click();
   const demo = page.locator("#harmony-demo");
@@ -63,6 +63,12 @@ test("the phrase finishes, and direct interaction, Escape and pause cancel it", 
   await expect(demo).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#selection")).toContainText("선택한 현을 튕겼습니다");
   await expect(demo).toHaveAttribute("aria-pressed", "false", { timeout: 12000 });
+});
+
+test("the phrase restarts after Escape and direct interaction cancels it", async ({ page }) => {
+  await ready(page);
+  await page.getByRole("button", { name: "어울리는 현 3개 놓기" }).click();
+  const demo = page.locator("#harmony-demo");
   await demo.click();
   await expect(demo).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
@@ -71,6 +77,12 @@ test("the phrase finishes, and direct interaction, Escape and pause cancel it", 
   await expect(demo).toHaveAttribute("aria-pressed", "true");
   await page.mouse.click(40, 100);
   await expect(demo).toHaveAttribute("aria-pressed", "false");
+});
+
+test("pause cancels the phrase and resume does not restart it", async ({ page }) => {
+  await ready(page);
+  await page.getByRole("button", { name: "어울리는 현 3개 놓기" }).click();
+  const demo = page.locator("#harmony-demo");
   await demo.click();
   await expect(demo).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "일시정지", exact: true }).click();
