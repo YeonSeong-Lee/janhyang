@@ -81,3 +81,10 @@ rtk proxy cp rive/build/janhyang.riv web/public/janhyang.riv
 GitHub 저장소의 **Actions → CI/CD → Run workflow**에서 `main`을 선택합니다.
 실패한 실행은 **Re-run failed jobs**로 재시도할 수 있습니다.
 `main` 이외의 브랜치에서 수동 실행하면 검사만 수행합니다.
+
+## 검색 및 공유 메타데이터
+
+SEO 메타데이터는 JavaScript 실행 없이 읽을 수 있도록 `web/index.html`에 둡니다.
+공식 주소를 변경하면 canonical, Open Graph URL·이미지, Twitter 이미지, JSON-LD와
+`web/public/robots.txt`, `web/public/sitemap.xml`의 주소를 함께 갱신하세요.
+파비콘과 홈 화면 아이콘, 1200×630 공유 이미지는 `web/public/`에서 배포합니다.
