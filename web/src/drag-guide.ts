@@ -11,7 +11,7 @@ export function createDragGuide(canvas: HTMLCanvasElement, enabled: () => boolea
   const line = document.querySelector<SVGLineElement>("#guide-line")!;
   const target = document.querySelector<SVGCircleElement>("#guide-target")!;
   const events = new AbortController();
-  let pointer: { id: number; touch: boolean; engaged: boolean; startX: number; startY: number; x: number; y: number } | undefined;
+  let pointer: { id: number; touch: boolean; startX: number; startY: number; x: number; y: number } | undefined;
   let gesture: GestureState = { cursor: "crosshair", drawing: false, previewFrequency: 0 };
 
   function cancel(): void {
@@ -73,7 +73,7 @@ export function createDragGuide(canvas: HTMLCanvasElement, enabled: () => boolea
 
   canvas.addEventListener("pointerdown", (event) => {
     if (!enabled() || pointer || event.button !== 0) return;
-    pointer = { id: event.pointerId, touch: event.pointerType !== "mouse", engaged: false,
+    pointer = { id: event.pointerId, touch: event.pointerType !== "mouse",
       startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY };
     gesture = { cursor: "crosshair", drawing: false, previewFrequency: 0 };
   }, { signal: events.signal });
@@ -98,12 +98,10 @@ export function createDragGuide(canvas: HTMLCanvasElement, enabled: () => boolea
   return {
     update(state: GestureState) {
       gesture = state;
-      const active = state.drawing || state.cursor === "grabbing";
-      // A queued hover notification can land between native pointer-down
-      // and Rive starting that gesture. It must not discard the new hand.
-      if (pointer && active) pointer.engaged = true;
-      if (!active && pointer?.engaged) cancel();
-      else render();
+      // Rive's previous release may arrive after the next native down.
+      // Its state controls what is shown, never ownership of the new hand:
+      // only native release/cancellation or an explicit control ends that.
+      render();
     },
     cancel,
     cleanup() { cancel(); events.abort(); },
