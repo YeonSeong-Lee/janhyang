@@ -8,7 +8,7 @@ import { Audio, AudioHandle } from "rive/audio";
 import { PropertyBoolean, PropertyNumber, PropertyString } from "rive/data";
 import { Color } from "rive/color";
 import { Medium, MAX_STRINGS, STEP } from "./medium";
-import { Strings, Struck, SAMPLES, RELEASED_TAP, RELEASED_STRING, RELEASED_PLUCK } from "./strings";
+import { Strings, StringLine, Struck, SAMPLES, RELEASED_TAP, RELEASED_STRING, RELEASED_PLUCK } from "./strings";
 import { Inputs, Note, Pluck } from "./pluck";
 import { Guide } from "./guide";
 import { Controls } from "./controls";
@@ -46,6 +46,12 @@ export class Main extends Layout {
     cursorProperty: PropertyString? = null;
     cancelProperty: PropertyNumber? = null;
     contactsProperty: PropertyNumber? = null;
+    pressureProperty: PropertyNumber? = null;
+    levelProperty: PropertyNumber? = null;
+    directionProperty: PropertyNumber? = null;
+    polyphonicProperty: PropertyBoolean? = null;
+    strokeLine: StringLine? = null;
+    strokeTime: f64 = 0;
     cancelSerial: f64 = 0;
     bowSoundTime: f64 = 0;
     showSelection: bool = false;
@@ -85,9 +91,19 @@ export class Main extends Layout {
 
     override advance(seconds: f64): bool {
         this.syncControls();
+        let stroke = this.strokeLine;
+        if (stroke != null) {
+            this.strokeTime += Math.min(seconds, 0.1);
+            if (this.strokeTime >= 1.25) this.cancelGesture();
+            else {
+                let at = this.strings.pointOn(stroke, 0.38);
+                let offset = (this.strokeTime / 1.25 - 0.5) * this.bow.halfLength;
+                this.bow.move(at.x + this.bow.dx * offset, at.y + this.bow.dy * offset, this.strings);
+            }
+        }
         this.bow.advance(seconds, this.strings);
         if (this.bow.sounding) this.guide.rung = true;
-        if (this.bowMode && this.pointerIsDown) {
+        if (this.bowMode && (this.pointerIsDown || this.strokeLine != null)) {
             this.bowSoundTime += seconds;
             if (this.bowSoundTime >= 1.0 / 60) {
                 this.bowSoundTime = 0;
@@ -96,6 +112,11 @@ export class Main extends Layout {
         }
         let contacts = this.contactsProperty;
         if (contacts != null && contacts.value != this.bow.contacts) contacts.value = this.bow.contacts;
+        let level = this.levelProperty;
+        let direction = this.directionProperty;
+        let rounded = Math.round(this.bow.level * 20) / 20;
+        if (level != null && level.value != rounded) level.value = rounded;
+        if (direction != null && direction.value != this.bow.direction) direction.value = this.bow.direction;
         this.strings.advance(seconds);
         if (!this.bowMode) this.guide.advance(seconds, this.strings);
         this.pending = Math.min(this.pending + seconds, MAX_CATCH_UP);
@@ -113,7 +134,18 @@ export class Main extends Layout {
             this.cursorProperty = model.getString("cursor");
             this.cancelProperty = model.getNumber("cancelGesture");
             this.contactsProperty = model.getNumber("bowContacts");
+            this.pressureProperty = model.getNumber("bowPressure");
+            this.levelProperty = model.getNumber("bowLevel");
+            this.directionProperty = model.getNumber("bowDirection");
+            this.polyphonicProperty = model.getBoolean("bowPolyphonic");
         }
+        let polyphonic = this.polyphonicProperty;
+        if (polyphonic != null && polyphonic.value != this.bow.polyphonic) {
+            this.cancelGesture();
+            this.bow.polyphonic = polyphonic.value;
+        }
+        let pressure = this.pressureProperty;
+        if (pressure != null) this.bow.pressure = Math.max(0, Math.min(1, pressure.value));
         let mode = this.modeProperty;
         let cancel = this.cancelProperty;
         if (mode != null && mode.value != this.bowMode) {
@@ -147,7 +179,10 @@ export class Main extends Layout {
             if (line.leaving) continue;
             this.note.voice = voice++;
             this.note.frequency = <f32>line.frequency;
-            this.note.gain = <f32>(line.bowStrength * balance);
+            this.note.gain = line.bowStrength > 0 ? <f32>(balance * (0.45 + 0.55 * this.bow.pressure)) : 0;
+            this.note.velocity = <f32>Math.max(-1, Math.min(1, this.bow.velocity / 420));
+            this.note.pressure = <f32>this.bow.pressure;
+            this.note.position = <f32>line.bowAt;
             this.inputs.notes.send(this.note);
         }
         while (voice < 12) {
@@ -160,6 +195,8 @@ export class Main extends Layout {
     private cancelGesture(): void {
         this.pointerIsDown = false;
         this.pointerId = -1;
+        this.strokeLine = null;
+        this.strokeTime = 0;
         this.strings.cancel();
         this.strings.unhover();
         this.bow.cancel(this.strings);
@@ -195,11 +232,16 @@ export class Main extends Layout {
     override pointerDown(event: PointerEvent): void {
         this.syncControls();
         if (this.pointerIsDown) return;
+        if (this.strokeLine != null) this.cancelGesture();
         this.showSelection = false;
         this.wakeSound();
         this.pointerIsDown = true;
         this.pointerId = event.id;
-        if (this.bowMode) this.bow.press(event.position.x, event.position.y, this.strings);
+        if (this.bowMode) {
+            this.bow.press(event.position.x, event.position.y, this.strings);
+            this.controls.selected = this.strings.nearestTo(event.position.x, event.position.y);
+            this.publishControls();
+        }
         else this.strings.press(<f64>event.position.x, <f64>event.position.y);
         if (this.strings.held != null) this.controls.selected = this.strings.held;
         this.guide.pressed(this.strings);
@@ -209,6 +251,7 @@ export class Main extends Layout {
 
     override pointerMove(event: PointerEvent): void {
         this.syncControls();
+        if (this.strokeLine != null) return;
         if (this.pointerIsDown && event.id != this.pointerId) return;
         if (this.bowMode) {
             this.bow.move(event.position.x, event.position.y, this.strings);
@@ -302,6 +345,44 @@ export class Main extends Layout {
             this.strings.released = RELEASED_PLUCK;
         }
         this.guide.released(this.strings);
+        this.publishControls();
+    }
+
+    @input bowStroke(): void {
+        this.syncControls();
+        if (!this.bowMode) return;
+        this.beginControl();
+        let line = this.controls.current(this.strings);
+        if (line == null) return;
+        this.wakeSound();
+        let at = this.strings.pointOn(line, 0.38);
+        let dx = -(line.by - line.ay) / line.length;
+        let dy = (line.bx - line.ax) / line.length;
+        this.bow.press(at.x - dx * this.bow.halfLength * 0.5,
+            at.y - dy * this.bow.halfLength * 0.5, this.strings);
+        // Use the selected string's orientation even if its neighbours are
+        // closer to the frog at the start of this accessible stroke.
+        this.bow.dx = dx;
+        this.bow.dy = dy;
+        this.bow.focused = line;
+        this.strokeLine = line;
+        this.setCursor("grabbing");
+    }
+
+    @input practiceStrings(): void {
+        this.beginControl();
+        // This is an empty-state action, never replace someone's instrument.
+        if (this.controls.kept(this.strings).length > 0) return;
+        let landscape = this.width >= 700 && this.height <= 560;
+        let usableWidth = landscape ? this.width - 360 : this.width;
+        for (let i = 0; i < 4; i++) {
+            let x = usableWidth * (0.28 + <f64>i * 0.145);
+            let bottom = landscape ? 0.76 : 0.47;
+            let line = this.strings.add(x, this.height * 0.19, x, this.height * (bottom - <f64>i * 0.025));
+            line.frequency = 196 * Math.pow(1.498307, <f64>i);
+            if (i == 1) this.controls.selected = line;
+        }
+        this.guide.rung = true;
         this.publishControls();
     }
 

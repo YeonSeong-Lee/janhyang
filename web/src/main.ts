@@ -1,5 +1,6 @@
 import { prepareIsolation } from "./isolation";
-import type { InstrumentState, Player } from "./player";
+import type { GestureState, InstrumentState, Player } from "./player";
+import "./bow.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#stage")!;
 const report = document.querySelector<HTMLPreElement>("#report")!;
@@ -8,6 +9,18 @@ const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const playback = document.querySelector<HTMLButtonElement>("#playback")!;
 const bowModeButton = document.querySelector<HTMLButtonElement>("#bow-mode")!;
 const gestureHint = document.querySelector<HTMLParagraphElement>("#gesture-hint")!;
+const bowStudio = document.querySelector<HTMLElement>("#bow-studio")!;
+const bowPressure = document.querySelector<HTMLInputElement>("#bow-pressure")!;
+const pressureValue = document.querySelector<HTMLOutputElement>("#pressure-value")!;
+const bowState = document.querySelector<HTMLElement>("#bow-state")!;
+const bowNote = document.querySelector<HTMLElement>("#bow-note")!;
+const bowMeter = document.querySelector<HTMLElement>("#bow-meter")!;
+const bowDirection = document.querySelector<HTMLElement>("#bow-direction")!;
+const bowBlend = document.querySelector<HTMLButtonElement>("#bow-blend")!;
+const practiceStrings = document.querySelector<HTMLButtonElement>("#practice-strings")!;
+const bowStroke = document.querySelector<HTMLButtonElement>("#bow-stroke")!;
+const bowPrevious = document.querySelector<HTMLButtonElement>("#bow-previous")!;
+const bowNext = document.querySelector<HTMLButtonElement>("#bow-next")!;
 const retry = document.querySelector<HTMLButtonElement>("#retry")!;
 const instrumentControls = document.querySelector<HTMLFieldSetElement>("#instrument-controls")!;
 const instrumentHint = document.querySelector<HTMLParagraphElement>("#instrument-hint")!;
@@ -34,6 +47,7 @@ let disposed = false;
 let bowMode = false;
 let gestureCursor = "crosshair";
 let bowContacts = 0;
+let bowLevel = 0;
 let instrument: InstrumentState = { count: 0, selected: 0, frequency: 0, notesPlayed: 0 };
 
 function note(line: string): void {
@@ -66,16 +80,33 @@ function updateInstrumentControls(): void {
     : loading ? "수면을 준비하고 있습니다…"
     : !ready ? "재생을 누른 뒤 현을 만들고 연주할 수 있습니다."
     : "Tab으로 이동하고 Enter 또는 Space로 버튼을 누르세요. 선택한 현에는 밝은 점이 표시됩니다.";
+  practiceStrings.hidden = instrument.count > 0;
+  practiceStrings.disabled = !ready;
+  for (const button of [bowStroke, bowPrevious, bowNext]) button.disabled = !ready || instrument.count === 0;
+  bowPressure.disabled = !ready;
+  bowBlend.disabled = !ready;
+  bowNote.textContent = instrument.count > 0 ? noteName(instrument.frequency) : "아직 현이 없어요";
+  bowNote.setAttribute("aria-label", instrument.count > 0
+    ? `선택한 현 ${instrument.selected}, ${noteName(instrument.frequency)}, ${numbers.format(instrument.frequency)} 헤르츠` : "아직 현이 없어요");
+  updateGestureHint();
+}
+
+function noteName(frequency: number): string {
+  const midi = Math.round(69 + 12 * Math.log2(frequency / 440));
+  const names = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+  return `${names[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 }
 
 function updateInstrument(state: InstrumentState): void {
   const played = state.notesPlayed > instrument.notesPlayed;
+  const startedPractice = instrument.count === 0 && state.count > 0 && document.activeElement === practiceStrings;
   instrument = state;
   const description = state.count === 0 ? "아직 현이 없습니다. 현 만들기를 눌러 시작하세요."
     : `전체 ${numbers.format(state.count)}개 중 ${numbers.format(state.selected)}번째 현 · ${numbers.format(state.frequency)}\u00a0Hz`;
   const message = played ? `선택한 현을 튕겼습니다. ${description}` : description;
   if (selection.textContent !== message) selection.textContent = message;
   updateInstrumentControls();
+  if (startedPractice) bowStroke.focus();
 }
 
 function updatePlayback(): void {
@@ -85,6 +116,8 @@ function updatePlayback(): void {
   canvas.inert = paused || loading || failed;
   bowModeButton.hidden = !player || failed;
   bowModeButton.setAttribute("aria-disabled", String(!canPlayInstrument()));
+  bowStudio.hidden = !bowMode || !player || failed;
+  document.body.classList.toggle("bowing", bowMode && Boolean(player));
   updateGestureHint();
   updateInstrumentControls();
 }
@@ -92,17 +125,28 @@ function updatePlayback(): void {
 function updateGestureHint(): void {
   gestureHint.hidden = !canPlayInstrument();
   gestureHint.textContent = bowMode
-    ? bowContacts > 0
-      ? `${bowContacts}개의 현에 활이 닿아 있어요 · 누른 채 천천히 왕복하세요`
-      : "활로 켜기 · 여러 현에 활을 대고 누른 채 왕복하세요"
+    ? instrument.count === 0 ? "연습 현을 놓거나, 활로 켜기를 끄고 나만의 현을 그려보세요"
+    : bowContacts > 0
+      ? bowLevel > 0 ? `${bowContacts}개의 현을 켜고 있어요 · 속도로 소리의 크기를 조절하세요`
+      : `${bowContacts}개의 현에 활이 닿아 있어요 · 활의 긴 방향으로 왕복하세요`
+      : "현 위에 활을 대고, 누른 채 활의 긴 방향으로 움직이세요"
     : gestureCursor === "grabbing" ? "현을 잡았어요 · 당겼다가 놓으세요"
     : gestureCursor === "grab" ? "현을 잡으려면 누른 채 당기세요"
     : "빈 곳을 드래그해 현을 만드세요";
+  bowState.textContent = !canPlayInstrument() ? "잠시 멈춤"
+    : instrument.count === 0 ? "첫 소리를 준비하세요"
+    : bowLevel > 0 ? `${bowContacts || 1}개 현이 울리는 중`
+    : gestureCursor === "grabbing" ? "천천히 움직여보세요"
+    : bowContacts > 0 ? "활을 움직이면 소리가 나요" : "활을 현에 대어보세요";
+  bowStudio.dataset.sounding = String(bowLevel > 0 && canPlayInstrument());
+  bowMeter.style.setProperty("--level", String(canPlayInstrument() ? bowLevel : 0));
 }
 
-function updateGesture(cursor: string, contacts: number): void {
-  gestureCursor = cursor;
-  bowContacts = contacts;
+function updateGesture(state: GestureState): void {
+  gestureCursor = state.cursor;
+  bowContacts = state.contacts;
+  bowLevel = state.level;
+  bowDirection.dataset.direction = state.direction > 0 ? "forward" : "backward";
   updateGestureHint();
 }
 
@@ -174,7 +218,37 @@ bowModeButton.addEventListener("click", () => {
   bowModeButton.setAttribute("aria-pressed", String(bowMode));
   player!.setBowMode(bowMode);
   bowContacts = 0;
-  updateGestureHint();
+  bowLevel = 0;
+  updatePlayback();
+}, { signal: events.signal });
+
+bowPressure.addEventListener("input", () => {
+  const value = Number(bowPressure.value);
+  player?.setBowPressure(value / 100);
+  const label = value < 35 ? "가볍게" : value < 70 ? "보통" : "단단하게";
+  pressureValue.value = label;
+  bowPressure.setAttribute("aria-valuetext", `${label}, ${value}%`);
+}, { signal: events.signal });
+bowBlend.addEventListener("click", () => {
+  if (!canPlayInstrument()) return;
+  const together = bowBlend.getAttribute("aria-pressed") !== "true";
+  bowBlend.setAttribute("aria-pressed", String(together));
+  player!.setBowPolyphonic(together);
+}, { signal: events.signal });
+practiceStrings.addEventListener("click", () => {
+  if (canPlayInstrument() && instrument.count === 0) player!.practiceStrings();
+}, { signal: events.signal });
+bowStroke.addEventListener("click", () => {
+  if (canPlayInstrument() && instrument.count > 0) player!.bowStroke();
+}, { signal: events.signal });
+bowPrevious.addEventListener("click", () => {
+  if (canPlayInstrument()) player!.selectString(-1);
+}, { signal: events.signal });
+bowNext.addEventListener("click", () => {
+  if (canPlayInstrument()) player!.selectString(1);
+}, { signal: events.signal });
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && canPlayInstrument()) player!.stopGesture();
 }, { signal: events.signal });
 
 createString.addEventListener("click", () => {

@@ -24,6 +24,12 @@
             <ScriptInputTrigger name="pluckString">
                 <DataBindContext sourcePathIds="0:40-0:47" propertyKey="870"/>
             </ScriptInputTrigger>
+            <ScriptInputTrigger name="practiceStrings">
+                <DataBindContext sourcePathIds="0:40-0:67" propertyKey="870"/>
+            </ScriptInputTrigger>
+            <ScriptInputTrigger name="bowStroke">
+                <DataBindContext sourcePathIds="0:40-0:68" propertyKey="870"/>
+            </ScriptInputTrigger>
         </ScriptedLayout>
     </LayoutComponent>
     <StateMachine name="State Machine 1" id="0:7">
@@ -46,6 +52,12 @@
     <ViewModelPropertyString name="cursor" id="0:61"/>
     <ViewModelPropertyNumber name="cancelGesture" id="0:62"/>
     <ViewModelPropertyNumber name="bowContacts" id="0:63"/>
+    <ViewModelPropertyNumber name="bowPressure" id="0:64"/>
+    <ViewModelPropertyNumber name="bowLevel" id="0:65"/>
+    <ViewModelPropertyNumber name="bowDirection" id="0:66"/>
+    <ViewModelPropertyTrigger name="practiceStrings" id="0:67"/>
+    <ViewModelPropertyTrigger name="bowStroke" id="0:68"/>
+    <ViewModelPropertyBoolean name="bowPolyphonic" id="0:69"/>
     <ViewModelInstance name="Default" id="0:41" exports="true">
         <ViewModelInstanceNumber viewModelPropertyId="0:42" propertyValue="0.5"/>
         <ViewModelInstanceNumber viewModelPropertyId="0:43" propertyValue="0.5"/>
@@ -61,6 +73,12 @@
         <ViewModelInstanceString viewModelPropertyId="0:61" propertyValue="crosshair"/>
         <ViewModelInstanceNumber viewModelPropertyId="0:62" propertyValue="0"/>
         <ViewModelInstanceNumber viewModelPropertyId="0:63" propertyValue="0"/>
+        <ViewModelInstanceNumber viewModelPropertyId="0:64" propertyValue="0.5"/>
+        <ViewModelInstanceNumber viewModelPropertyId="0:65" propertyValue="0"/>
+        <ViewModelInstanceNumber viewModelPropertyId="0:66" propertyValue="1"/>
+        <ViewModelInstanceTrigger viewModelPropertyId="0:67"/>
+        <ViewModelInstanceTrigger viewModelPropertyId="0:68"/>
+        <ViewModelInstanceBoolean viewModelPropertyId="0:69" propertyValue="false"/>
     </ViewModelInstance>
 </ViewModel>
 </Rive>

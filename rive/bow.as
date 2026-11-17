@@ -5,10 +5,13 @@ import { Renderer } from "rive/renderer";
 import { Vector } from "rive/vector";
 import { Strings, StringLine, MAX_KEPT } from "./strings";
 
-/// One visible bow can touch every string along its hair at the same time.
+/// A solo bow locks its nearest string for the stroke; ensemble mode can
+/// touch every string along the hair at the same time.
 /// Its angle follows the nearest string before a press, then stays fixed
 /// throughout that stroke, including when the direction reverses.
 export class Bow {
+    polyphonic: bool = false;
+    focused: StringLine? = null;
     down: bool = false;
     visible: bool = false;
     x: f64 = 0;
@@ -18,6 +21,13 @@ export class Bow {
     halfLength: f64 = 160;
     travel: f64 = 0;
     speed: f64 = 0;
+    velocity: f64 = 0;
+    direction: f64 = 1;
+    pressure: f64 = 0.5;
+    level: f64 = 0;
+    // Signed distance along the hair. Moving along the string relocates
+    // contact but cannot supply energy to a perpendicular bow.
+    displacement: f64 = 0;
     contacts: i32 = 0;
     sounding: bool = false;
     along: StaticArray<f64> = new StaticArray<f64>(MAX_KEPT);
@@ -50,12 +60,15 @@ export class Bow {
         this.visible = true;
         if (!this.down) {
             let nearest = strings.nearestTo(x, y);
+            this.focused = nearest;
             if (nearest != null) {
                 this.dx = -(nearest.by - nearest.ay) / nearest.length;
                 this.dy = (nearest.bx - nearest.ax) / nearest.length;
             }
         } else {
-            this.travel += distance;
+            let stroke = (x - fromX) * this.dx + (y - fromY) * this.dy;
+            this.travel += Math.abs(stroke);
+            this.displacement += stroke;
             // Check the swept path, so a quick stroke cannot tunnel through
             // strings between two input events. Bound the work after a jump.
             let steps = <i32>Math.max(1, Math.min(96, Math.ceil(distance / 8)));
@@ -81,7 +94,11 @@ export class Bow {
         this.visible = false;
         this.travel = 0;
         this.speed = 0;
+        this.velocity = 0;
+        this.displacement = 0;
+        this.level = 0;
         this.sounding = false;
+        this.focused = null;
         this.clearContacts();
         for (let i = 0; i < strings.lines.length; i++) strings.lines[i].bowStrength = 0;
     }
@@ -124,7 +141,7 @@ export class Bow {
         for (let i = 0; i < strings.lines.length && voice < MAX_KEPT; i++) {
             let line = strings.lines[i];
             if (line.leaving) continue;
-            let along = this.contact(line);
+            let along = this.polyphonic || line == this.focused ? this.contact(line) : -1;
             if (sweep) {
                 if (along >= 0) this.swept[voice] = along;
             } else {
@@ -139,12 +156,17 @@ export class Bow {
         if (!(seconds > 0)) return;
         let dt = Math.min(seconds, 0.1);
         let target = this.down ? Math.min(this.travel / dt, 1200) : 0;
+        let signedTarget = this.down ? Math.max(-1200, Math.min(1200, this.displacement / dt)) : 0;
+        if (Math.abs(this.displacement) > 0.1) this.direction = this.displacement > 0 ? 1 : -1;
         this.travel = 0;
+        this.displacement = 0;
         // Quick attack, gentle release; a stationary bow soon falls silent.
         this.speed += (target - this.speed) * (1 - Math.exp(-dt / (target > this.speed ? 0.025 : 0.045)));
-        let strength = this.down ? Math.min(this.speed / 420, 1) : 0;
+        this.velocity += (signedTarget - this.velocity) * (1 - Math.exp(-dt / 0.025));
+        let strength = this.down ? Math.min(this.speed / 420, 1) * Math.sqrt(this.pressure) : 0;
         if (strength < 0.015) strength = 0;
         this.sounding = false;
+        this.level = 0;
         if (this.visible) this.findContacts(strings, false);
         let voice = 0;
         for (let i = 0; i < strings.lines.length; i++) {
@@ -155,7 +177,9 @@ export class Bow {
             if (along >= 0 && strength > 0) {
                 line.bowAt = along;
                 line.bowStrength = strength;
+                line.bowDirection = this.direction;
                 this.sounding = true;
+                this.level = strength;
             }
             this.swept[voice] = -1;
             voice++;
@@ -179,8 +203,15 @@ export class Bow {
     draw(renderer: Renderer, strings: Strings): void {
         if (!this.visible) return;
         let alpha = this.down ? 245 : 155;
+        // A faint rail gives the hand a direction before the first stroke.
+        if (!this.down) this.stroke(renderer, 0, 12, Color.rgba(186, 203, 240, 12));
+        if (this.sounding) this.stroke(renderer, 0, 5, Color.rgba(220, 225, 255, <i32>(55 * this.level)));
         this.stroke(renderer, 7, 3, Color.rgba(192, 151, 105, alpha));
         this.stroke(renderer, 0, 1.8, Color.rgba(250, 239, 214, alpha));
+        // The frog makes the two directions of the bow legible.
+        let frog = Vector.xy(<f32>(this.x - this.dx * (this.halfLength - 16) - this.dy * 4),
+            <f32>(this.y - this.dy * (this.halfLength - 16) + this.dx * 4));
+        strings.drawDot(renderer, frog, 5, Color.rgba(161, 128, 91, alpha), Color.rgba(238, 224, 199, alpha));
         let voice = 0;
         for (let i = 0; i < strings.lines.length && voice < MAX_KEPT; i++) {
             let line = strings.lines[i];

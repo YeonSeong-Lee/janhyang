@@ -31,9 +31,27 @@ function tone(samples: StaticArray<f32>, frequency: f64): f64 {
 
 export class BowTests extends Tests {
     override run(): void {
+        test("a solo stroke locks one string until release", (expect) => {
+            let strings = instrument();
+            let bow = new Bow();
+            bow.press(300, 205, strings);
+            bow.move(300, 280, strings);
+            bow.advance(1.0 / 60, strings);
+            expect.that(bow.contacts).is(1);
+            expect.that(strings.lines[0].bowStrength).greaterThan(0);
+            expect.that(strings.lines[1].bowStrength).is(0);
+            bow.cancel(strings);
+            bow.press(300, 280, strings);
+            bow.move(300, 260, strings);
+            bow.advance(1.0 / 60, strings);
+            expect.that(strings.lines[0].bowStrength).is(0);
+            expect.that(strings.lines[1].bowStrength).greaterThan(0);
+        });
+
         test("hover and a stationary press are silent", (expect) => {
             let strings = instrument();
             let bow = new Bow();
+            bow.polyphonic = true;
             bow.move(300, 240, strings);
             bow.advance(1.0 / 60, strings);
             expect.that(bow.contacts).is(2);
@@ -47,6 +65,7 @@ export class BowTests extends Tests {
         test("one stroke sustains every contacted string and leaves distant strings quiet", (expect) => {
             let strings = instrument();
             let bow = new Bow();
+            bow.polyphonic = true;
             bow.press(300, 240, strings);
             bow.move(300, 255, strings);
             bow.advance(1.0 / 60, strings);
@@ -65,6 +84,7 @@ export class BowTests extends Tests {
         test("stopping and cancelling do not leave a sustained note", (expect) => {
             let strings = instrument();
             let bow = new Bow();
+            bow.polyphonic = true;
             bow.press(300, 240, strings);
             bow.move(300, 260, strings);
             bow.advance(1.0 / 60, strings);
@@ -83,8 +103,9 @@ export class BowTests extends Tests {
         test("a fast stroke catches strings between pointer events", (expect) => {
             let strings = instrument();
             let bow = new Bow();
+            bow.polyphonic = true;
             bow.press(50, 240, strings);
-            bow.move(750, 240, strings);
+            bow.move(750, 320, strings);
             bow.advance(1.0 / 60, strings);
             expect.that(bow.contacts).is(0);
             expect.that(strings.lines[0].bowStrength).greaterThan(0);
@@ -93,11 +114,48 @@ export class BowTests extends Tests {
             expect.that(bow.sounding).is(false);
         });
 
+        test("sliding along a string relocates the bow without sounding it", (expect) => {
+            let strings = instrument();
+            let bow = new Bow();
+            bow.polyphonic = true;
+            bow.press(200, 240, strings);
+            bow.move(450, 240, strings);
+            bow.advance(1.0 / 60, strings);
+            expect.that(bow.contacts).is(2);
+            expect.that(bow.sounding).is(false);
+            expect.that(strings.lines[0].bowAt).is(0.5);
+            bow.move(450, 260, strings);
+            bow.advance(1.0 / 60, strings);
+            expect.that(bow.sounding).is(true);
+            expect.that(strings.lines[0].bowAt).greaterThan(0.6);
+        });
+
+        test("pressure, speed and reversal respond independently", (expect) => {
+            let strings = instrument();
+            let bow = new Bow();
+            bow.polyphonic = true;
+            bow.press(300, 240, strings);
+            bow.pressure = 0;
+            bow.move(300, 260, strings);
+            bow.advance(1.0 / 60, strings);
+            expect.that(bow.sounding).is(false);
+            bow.pressure = 0.5;
+            bow.move(300, 280, strings);
+            bow.advance(1.0 / 60, strings);
+            expect.that(bow.sounding).is(true);
+            expect.that(bow.direction).is(1);
+            bow.move(300, 240, strings);
+            bow.advance(1.0 / 60, strings);
+            expect.that(bow.direction).is(-1);
+            expect.that(bow.velocity).lessThan(0);
+        });
+
         test("the bow orients across vertical strings and ignores retired ones", (expect) => {
             let strings = new Strings();
             strings.add(200, 100, 200, 600);
             strings.add(280, 100, 280, 600);
             let bow = new Bow();
+            bow.polyphonic = true;
             bow.press(240, 300, strings);
             expect.that(bow.dx).is(-1);
             expect.that(bow.dy).is(0);
@@ -112,6 +170,7 @@ export class BowTests extends Tests {
         test("continuous bowing keeps the physical strings bounded with fixed anchors", (expect) => {
             let strings = instrument();
             let bow = new Bow();
+            bow.polyphonic = true;
             bow.press(300, 240, strings);
             for (let frame = 0; frame < 180; frame++) {
                 bow.move(300, 240 + Math.sin(<f64>frame / 12) * 45, strings);
@@ -141,8 +200,8 @@ export class BowTests extends Tests {
             inputs.notes.send(note);
             let samples = new StaticArray<f32>(4800);
             audio.process(samples, 4800, 0);
-            expect.that(tone(samples, 220)).greaterThan(0.02);
-            expect.that(tone(samples, 330)).greaterThan(0.02);
+            expect.that(tone(samples, 220)).greaterThan(0.006);
+            expect.that(tone(samples, 330)).greaterThan(0.006);
             expect.that(tone(samples, 275)).lessThan(0.003);
             for (let block = 0; block < 12; block++) {
                 for (let i = 0; i < samples.length; i++) samples[i] = 0;

@@ -117,6 +117,35 @@
         수면에 선을 그어 현을 만들고, 당겼다 놓아 소리와 파문을 만드는 작품입니다.
       </canvas>
       <p id="gesture-hint" hidden>빈 곳을 드래그해 현을 만드세요</p>
+      <section id="bow-studio" aria-labelledby="bow-title" hidden>
+        <div class="bow-heading">
+          <div>
+            <h2 id="bow-title">활로 켜기</h2>
+            <p id="bow-state">첫 소리를 준비하세요</p>
+          </div>
+          <div class="bow-tools">
+            <div id="bow-direction" data-direction="forward" aria-hidden="true"><span>←</span><i></i><span>→</span></div>
+            <button id="bow-blend" type="button" aria-label="여러 현 함께 켜기" aria-pressed="false" aria-describedby="bow-instructions">함께 켜기</button>
+          </div>
+        </div>
+        <div id="bow-meter" aria-hidden="true"><span></span></div>
+        <button id="practice-strings" type="button">연습 현 놓기 <span>G · D · A · E</span></button>
+        <div class="bow-pressure-control">
+          <label for="bow-pressure">활의 압력</label>
+          <input id="bow-pressure" type="range" min="10" max="100" step="1" value="50" aria-valuetext="보통, 50%" aria-describedby="pressure-hint" />
+          <output id="pressure-value" for="bow-pressure">보통</output>
+        </div>
+        <p id="pressure-hint" class="bow-tip">가볍게 대면 부드럽게, 단단히 대면 선명하게. 펜은 누르는 힘으로 조절해요.</p>
+        <div class="bow-actions">
+          <div class="bow-selection" role="group" aria-label="연주할 현 선택">
+            <button id="bow-previous" type="button" aria-label="이전 연주 현">‹</button>
+            <span id="bow-note" role="status" aria-live="polite" aria-atomic="true">아직 현이 없어요</span>
+            <button id="bow-next" type="button" aria-label="다음 연주 현">›</button>
+          </div>
+          <button id="bow-stroke" type="button" aria-describedby="stroke-hint">한 활 연주</button>
+        </div>
+        <p id="stroke-hint" class="bow-tip">버튼으로도 짧게 켤 수 있어요. Esc를 누르면 멈춥니다.</p>
+      </section>
       <div id="notice">
         <p id="status" role="status" aria-live="polite" aria-atomic="true"></p>
         <button id="retry" type="button" hidden>다시 불러오기</button>
@@ -127,7 +156,7 @@
         <details>
           <summary>사용 안내</summary>
           <p id="instructions">빈 수면을 마우스나 손가락으로 드래그해 현을 만드세요. 만든 현을 옆으로 당겼다 놓으면 소리와 파문이 퍼집니다. 키보드나 클릭만으로 연주하려면 아래 버튼을 사용하세요.</p>
-          <p id="bow-instructions">현에 가까이 가면 손 모양 커서와 고리가 나타납니다. 누르면 고리가 좁아지며 현을 잡습니다. ‘활로 켜기’를 켜고 누른 채 왕복하면, 활에 닿는 여러 현이 함께 울립니다. 활은 가까운 현에 맞춰 방향을 잡고, 누르는 동안 그 방향을 유지합니다. 손을 멈추거나 떼면 소리가 잦아듭니다. 현을 더 그리려면 ‘활로 켜기’를 끄세요.</p>
+          <p id="bow-instructions">‘활로 켜기’를 켜고 현 위에 활을 대세요. 누른 채 활의 긴 방향으로 왕복하면 가장 가까운 현이 울립니다. 누르는 동안 같은 현을 유지하고, 놓으면 다른 현으로 옮길 수 있습니다. ‘함께 켜기’를 켜면 활에 닿는 여러 현이 함께 울립니다. 빠르게 움직이면 소리가 커지고, 압력을 바꾸거나 현의 끝 쪽으로 옮기면 음색이 달라집니다. 손을 멈추거나 떼면 소리가 잦아듭니다. 현이 없다면 ‘연습 현 놓기’로 시작하세요. ‘한 활 연주’ 버튼은 선택한 현 부근에서 짧게 활을 움직입니다. 새 현을 그리려면 ‘활로 켜기’를 끄세요.</p>
           <p>일시정지를 누르면 움직임과 소리가 멈춥니다. 움직임 줄이기 설정을 사용 중이면 재생을 눌러 시작할 수 있습니다.</p>
           <fieldset id="instrument-controls" aria-describedby="instrument-hint" hidden>
             <legend>버튼으로 연주</legend>

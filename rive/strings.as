@@ -128,6 +128,7 @@ export class StringLine {
     // A moving bow drives a point continuously; it never pins the string.
     bowAt: f64 = 0.5;
     bowStrength: f64 = 0;
+    bowDirection: f64 = 1;
     bowPhase: f64 = 0;
 
     /// Points it moves in a STRING_STEP at the most when let go from its
@@ -264,7 +265,13 @@ export class StringLine {
                 next[held] = fingerStart + (fingerEnd - fingerStart) * <f64>(s + 1) / <f64>this.substeps;
             } else if (this.bowStrength > 0) {
                 let contact = <i32>Math.max(1, Math.min(n - 1, Math.round(this.bowAt * n)));
-                let target = Math.sin(this.bowPhase) * Math.min(10, this.length * 0.025) * this.bowStrength;
+                // A slow visual travelling corner: a long carry and a short
+                // slip, changing side when the hand reverses. Audio runs its
+                // own waveguide at sample rate (bowed.as).
+                let cycle = this.bowPhase / (2 * Math.PI);
+                cycle -= Math.floor(cycle);
+                let shape = cycle < 0.82 ? cycle / 0.82 * 2 - 1 : 1 - (cycle - 0.82) / 0.18 * 2;
+                let target = shape * this.bowDirection * Math.min(10, this.length * 0.025) * this.bowStrength;
                 next[contact] += (target - next[contact]) * 0.35 / <f64>this.substeps;
             }
             for (let i = 0; i <= n; i++) {

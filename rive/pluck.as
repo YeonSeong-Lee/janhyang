@@ -3,6 +3,7 @@
 // pitch can sound without a recorded sample.
 import { AudioProcessor } from "rive/audio";
 import { Ring } from "rive/shared";
+import { BowedVoice } from "./bowed";
 
 /// One pluck, sent from the scene to the audio thread.
 export class Note {
@@ -12,6 +13,9 @@ export class Note {
     frequency: f32 = 220;
     /// How hard it was struck, 0 to 1.
     gain: f32 = 0;
+    velocity: f32 = 0.55;
+    pressure: f32 = 0.5;
+    position: f32 = 0.5;
 }
 
 /// What the scene and the audio thread share.
@@ -48,16 +52,18 @@ export class Pluck extends AudioProcessor<Inputs> {
     nextVoice: i32 = 0;
     seed: u32 = 22222;
     asleep: bool = true;
-    bowPhases: StaticArray<f32> = new StaticArray<f32>(VOICES);
-    bowFrequencies: StaticArray<f32> = new StaticArray<f32>(VOICES);
-    bowTargets: StaticArray<f32> = new StaticArray<f32>(VOICES);
-    bowLevels: StaticArray<f32> = new StaticArray<f32>(VOICES);
-    bowLives: StaticArray<i32> = new StaticArray<i32>(VOICES);
+    bows: Array<BowedVoice> = [];
+
+    constructor() {
+        super();
+        for (let i = 0; i < VOICES; i++) this.bows.push(new BowedVoice());
+    }
 
     override init(sampleRate: f64, maxFrames: i32, channels: i32, inputs: Inputs): void {
         this.inputs = inputs;
         this.channels = channels;
         this.rate = <f32>sampleRate;
+        for (let i = 0; i < VOICES; i++) this.bows[i].init(this.rate);
     }
 
     // Noise in -1 to 1.
@@ -126,14 +132,8 @@ export class Pluck extends AudioProcessor<Inputs> {
             if (voice < 0) {
                 this.strike(this.note);
             } else if (voice < VOICES) {
-                let frequency = this.note.frequency;
-                let gain = this.note.gain;
-                if (!(frequency >= LOWEST && frequency <= HIGHEST)) frequency = 220;
-                if (!(gain >= 0 && gain <= 1)) gain = 0;
-                this.bowFrequencies[voice] = frequency;
-                this.bowTargets[voice] = gain;
-                // Expire a lost gesture even if the scene stops advancing.
-                this.bowLives[voice] = <i32>(this.rate * 0.15);
+                this.bows[voice].update(this.note.frequency, this.note.gain,
+                    this.note.velocity, this.note.pressure, this.note.position);
             }
         }
 
@@ -168,42 +168,24 @@ export class Pluck extends AudioProcessor<Inputs> {
             this.lasts[voice] = last;
             this.lives[voice] = life - frames;
         }
-        let attack = 1 - Mathf.exp(-1 / (this.rate * 0.025));
-        let release = 1 - Mathf.exp(-1 / (this.rate * 0.065));
         for (let voice = 0; voice < VOICES; voice++) {
-            let level = this.bowLevels[voice];
-            let target = this.bowTargets[voice];
-            let life = this.bowLives[voice];
-            if (life <= 0) target = 0;
-            if (target == 0 && level < 0.0001) {
-                this.bowLevels[voice] = 0;
-                this.bowTargets[voice] = 0;
-                continue;
-            }
+            let bow = this.bows[voice];
+            if (!bow.active) continue;
             anyAlive = true;
-            let phase = this.bowPhases[voice];
-            let frequency = this.bowFrequencies[voice];
-            let delta = frequency / this.rate;
             for (let i = 0; i < frames; i++) {
-                if (--life <= 0) target = 0;
-                level += (target - level) * (target > level ? attack : release);
-                // A softened, band-limited harmonic tone. Preserve phase
-                // across moves and reversals instead of repeating plucks.
-                let sample: f32 = 0;
-                for (let harmonic = 1; harmonic <= 6; harmonic++) {
-                    let h = <f32>harmonic;
-                    if (frequency * h >= this.rate * 0.45) break;
-                    sample += Mathf.sin(phase * 2 * Mathf.PI * h) / (h * h);
-                }
-                let mixed = sample * level * 0.16;
+                let mixed = bow.tick();
                 for (let c = 0; c < channels; c++) out[i * channels + c] += mixed;
-                phase += delta;
-                if (phase >= 1) phase -= 1;
             }
-            this.bowPhases[voice] = phase;
-            this.bowLevels[voice] = level;
-            this.bowLives[voice] = life;
-            this.bowTargets[voice] = target;
+        }
+        for (let i = 0; i < frames * channels; i++) {
+            // Leave ordinary plucks untouched. Only a loud combined signal
+            // reaches this smooth ceiling below the output's full scale.
+            let sample = out[i];
+            let magnitude = Mathf.abs(sample);
+            if (magnitude > 0.8) {
+                let limited = 0.8 + 0.19 * (1 - Mathf.exp(-(magnitude - 0.8) / 0.19));
+                out[i] = sample < 0 ? -limited : limited;
+            }
         }
         this.asleep = !anyAlive;
     }
