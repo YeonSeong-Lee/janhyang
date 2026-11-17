@@ -1,11 +1,9 @@
 // The guide: what a first visitor is shown before they know what to do.
-// A string waits in the middle of the water, and a mouse pointer no one
-// holds comes to it, clicks, drags the string aside faster and faster and
-// lets go on the move, as if throwing it. It makes no sound, so the first
-// sound anyone hears is one they made themselves. A press anywhere sends
-// the pointer away and leaves the string there to be taken. Once a string
-// has rung, a tap on the empty water, or a long wait, shows the same
-// pointer drawing a line.
+// The water starts empty. A mouse pointer no one holds briefly draws a
+// line, leaving no real string behind. Once the visitor draws a string,
+// they get a moment to try it before the pointer shows how to pull it and
+// let go. A press anywhere sends the pointer away. The guide never makes
+// a sound, and retires once the visitor has made their first string ring.
 import { Color } from "rive/color";
 import { Paint, PaintStyle, StrokeCap, StrokeJoin } from "rive/paint";
 import { Path } from "rive/path";
@@ -18,8 +16,7 @@ import {
 
 // The steps of a pluck shown.
 const RESTING: i32 = 0;
-// The pointer comes to the string: from aside the first time, and after
-// that from where it last let go.
+// The pointer comes to the visitor's string from aside.
 const COMING: i32 = 1;
 // It clicks, taking hold of the string, and grips it a moment.
 const PRESSING: i32 = 2;
@@ -27,12 +24,10 @@ const PRESSING: i32 = 2;
 const THROWING: i32 = 3;
 // Let go, it carries on a little the way it was going.
 const FOLLOWING: i32 = 4;
-// It waits while the string rings, before the next pluck.
-const WAITING: i32 = 5;
 // The showing over, it fades away.
-const LEAVING: i32 = 6;
+const LEAVING: i32 = 5;
 // Cut short while holding, it gives the string back slowly.
-const EASING: i32 = 7;
+const EASING: i32 = 6;
 
 // The steps of a line shown.
 const NO_LINE: i32 = 0;
@@ -40,20 +35,17 @@ const DRAWING: i32 = 1;
 const SHOWING: i32 = 2;
 const FADING: i32 = 3;
 
-// Seconds from the first frame to the first pluck shown.
+// Seconds of empty water before the first drawing hint.
 const FIRST_WAIT: f64 = 1.0;
-// Seconds each step of a pluck takes: coming in from aside, coming back for
-// the next pluck, gripping, dragging until let go, carrying on, waiting
-// while the string rings, and fading away.
+// Seconds each step of a pluck takes: coming in from aside, gripping,
+// dragging until let go, carrying on, and fading away.
 const ENTER: f64 = 0.9;
-const RETURN: f64 = 0.6;
 const PRESS: f64 = 0.18;
 const THROW: f64 = 0.55;
 const FOLLOW: f64 = 0.35;
-const WAIT: f64 = 1.3;
 const LEAVE: f64 = 0.5;
-// Seconds after a press that rang nothing before the pluck is shown again,
-// and with no press at all.
+// Seconds to try a newly drawn string, or try again after a missed press,
+// before a pluck is shown; and the wait between idle reminders.
 const MISSED_WAIT: f64 = 3.0;
 const IDLE_WAIT: f64 = 20.0;
 // Seconds the pointer takes to appear, and to go when the visitor sends it
@@ -79,12 +71,8 @@ const MOST_MISSED: i32 = 2;
 const MOST_IDLE_LINES: i32 = 2;
 
 // Where along the string the pointer takes hold, and how far it drags as a
-// fraction of the furthest a string can be pulled: lightly, then hard, so
-// the colour can be seen to follow the strength; in between when the pluck
-// is shown once.
+// fraction of the furthest a string can be pulled.
 const TAKE_AT: f64 = 0.42;
-const LIGHT: f64 = 0.35;
-const HARD: f64 = 0.85;
 const ONCE: f64 = 0.6;
 // Where the pointer first comes from, from where it takes hold: below and
 // to the right, as a hand on a mouse brings it in.
@@ -98,7 +86,7 @@ const REACH: f64 = 24;
 // Points a second a string cut short is given back at: slow enough to stay
 // under QUIET in main.as, so the water is left still.
 const GIVE_BACK: f64 = 240;
-// How much the waiting string and the lines shown lean, in radians.
+// How much the drawing hint leans, in radians.
 const LEAN: f64 = -0.08;
 // The longest line shown, in points, and how far from the edges it keeps.
 const LINE_LENGTH: f64 = 160;
@@ -115,7 +103,7 @@ const PRESSED: f64 = 0.12;
 const KAPPA: f64 = 0.5523;
 
 export class Guide {
-    /// The string the pluck is shown on, while it is kept.
+    /// A string drawn by the visitor, used for the pluck hint while kept.
     line: StringLine? = null;
     width: f64 = 0;
     height: f64 = 0;
@@ -125,29 +113,21 @@ export class Guide {
     // Seconds since the last press or release.
     idle: f64 = 0;
     pointerDown: bool = false;
-    // The real pointer, up, is within reach of the waiting string.
+    // The real pointer, up, is within reach of the visitor's string.
     near: bool = false;
 
     // The pluck shown.
     step: i32 = RESTING;
     stepTime: f64 = 0;
-    // Seconds this coming takes: from aside, or back for the next pluck.
-    comeTime: f64 = ENTER;
-    // Plucks in this showing, and shown so far.
-    plucks: i32 = 0;
-    plucked: i32 = 0;
     // How far aside the string stood when the pointer took hold, how far it
     // drags it, and how fast it was going as it let go, in points and
     // points a second.
     pullFrom: f64 = 0;
     depth: f64 = 0;
     carry: f64 = 0;
-    // Seconds until the next showing, below 0 for none, and its plucks.
-    startIn: f64 = FIRST_WAIT;
-    startPlucks: i32 = 2;
+    // Seconds until the next pluck hint, below 0 for none.
+    startIn: f64 = -1;
     missedShown: i32 = 0;
-    // True once the first showing has run to its end.
-    firstDone: bool = false;
 
     // The pointer: where its tip is, where its move began, how clearly it
     // shows, and how far it is pressed in.
@@ -175,13 +155,15 @@ export class Guide {
     // The line shown.
     lineStep: i32 = NO_LINE;
     lineTime: f64 = 0;
+    // Keep the partial stroke in place when an input interrupts its fade.
+    lineProgress: f64 = 0;
     lineShown: f64 = 0;
     lineFade: f64 = LINE_OUT;
     x0: f64 = 0;
     y0: f64 = 0;
     x1: f64 = 0;
     y1: f64 = 0;
-    sinceLine: f64 = 0;
+    lineStartIn: f64 = FIRST_WAIT;
     idleLines: i32 = 0;
 
     path: Path = new Path();
@@ -197,40 +179,22 @@ export class Guide {
         this.fill.style = PaintStyle.fill;
     }
 
-    /// Lays the waiting string out for a scene this size. The scene may
-    /// still be settling on its size when it first comes up, and a phone may
-    /// be turned, so until the string has been rung a new size moves it to
-    /// the new middle. After that it stays where it is, as drawn ones do.
-    place(width: f64, height: f64, strings: Strings): void {
+    /// Only the drawing hint follows the viewport. User strings stay put.
+    resize(width: f64, height: f64): void {
         if (width <= 0 || height <= 0) {
             return;
         }
-        let same = Math.abs(width - this.width) < 1 && Math.abs(height - this.height) < 1;
+        let changed = Math.abs(width - this.width) >= 1 || Math.abs(height - this.height) >= 1;
         this.width = width;
         this.height = height;
-        let old = this.line;
-        if (this.rung || (same && old != null) || (old != null && strings.held == old)) {
-            return;
+        if (changed && !this.drawn && this.lineStep != NO_LINE) {
+            this.lineStep = NO_LINE;
+            this.lineShown = 0;
+            this.pressGoal = 0;
+            this.downAge = -1;
+            this.upAge = -1;
+            this.lineStartIn = FIRST_WAIT;
         }
-        if (old != null) {
-            strings.remove(old);
-            if (this.step != RESTING) {
-                // A showing under way starts again on the new string.
-                this.step = RESTING;
-                this.shown = 0;
-                this.shownGoal = 0;
-                this.press = 0;
-                this.pressGoal = 0;
-                this.startIn = 0.5;
-                this.startPlucks = this.firstDone ? 1 : 2;
-            }
-        }
-        let length = Math.min(0.42 * Math.max(width, height), 0.8 * width);
-        let dx = 0.5 * length * Math.cos(LEAN);
-        let dy = 0.5 * length * Math.sin(LEAN);
-        let cx = 0.5 * width;
-        let cy = 0.5 * height;
-        this.line = strings.add(cx - dx, cy - dy, cx + dx, cy + dy);
     }
 
     /// A press came down. Call it after Strings.press.
@@ -238,7 +202,7 @@ export class Guide {
         this.pointerDown = true;
         this.near = false;
         this.idle = 0;
-        this.sinceLine = 0;
+        this.lineStartIn = -1;
         this.startIn = -1;
         let line = this.line;
         this.sendAway(!(line != null && strings.held == line));
@@ -256,27 +220,32 @@ export class Guide {
         this.idle = 0;
         let what = strings.released;
         if (what == RELEASED_PLUCK) {
-            if (!this.rung) {
-                this.rung = true;
-                this.sinceLine = 0;
-            }
+            this.rung = true;
             this.startIn = -1;
             return;
         }
         if (what == RELEASED_STRING) {
             this.drawn = true;
-        }
-        if (!this.rung) {
-            this.missed();
+            this.lineStartIn = -1;
+            // The release just appended this string. Keep the original
+            // target until it retires, even if the visitor draws more.
+            if (this.line == null) {
+                this.line = strings.lines[strings.lines.length - 1];
+            }
+            if (!this.rung) {
+                this.startIn = MISSED_WAIT;
+            }
             return;
         }
-        if (what == RELEASED_TAP && !this.drawn) {
+        if (!this.drawn && what == RELEASED_TAP) {
             this.showLineFrom(strings.tapX, strings.tapY);
+        } else if (!this.rung) {
+            this.missed();
         }
     }
 
     /// The real pointer moved while up. `near` is whether a press there
-    /// would take the waiting string.
+    /// would take the string used for the hint.
     hovering(near: bool): void {
         if (near && !this.near) {
             // Close enough to take it: a pluck being shown steps aside, and
@@ -285,12 +254,11 @@ export class Guide {
             // again soon, there under the pointer. A showing already owed is
             // kept.
             let showing = this.step == COMING || this.step == PRESSING || this.step == THROWING
-                || this.step == FOLLOWING || this.step == WAITING;
+                || this.step == FOLLOWING;
             if (showing) {
                 this.sendAway(true);
                 if (!this.rung && this.startIn < 0) {
                     this.startIn = MISSED_WAIT;
-                    this.startPlucks = 1;
                 }
             }
         }
@@ -299,8 +267,13 @@ export class Guide {
 
     /// The real pointer left the scene.
     left(): void {
-        if (this.pointerDown && !this.rung) {
-            this.missed();
+        if (this.pointerDown) {
+            this.idle = 0;
+            if (!this.drawn) {
+                this.lineStartIn = MISSED_WAIT;
+            } else if (!this.rung) {
+                this.missed();
+            }
         }
         this.pointerDown = false;
         this.near = false;
@@ -311,7 +284,6 @@ export class Guide {
         if (this.missedShown < MOST_MISSED && this.line != null) {
             this.missedShown++;
             this.startIn = MISSED_WAIT;
-            this.startPlucks = 1;
         }
     }
 
@@ -336,12 +308,27 @@ export class Guide {
         let line = this.line;
         if (line != null && !strings.keeps(line)) {
             // Let go to make room for newer strings.
+            if (line.heldPoint >= 0 && strings.held != line) {
+                line.letGo();
+            }
             this.line = null;
             line = null;
             this.step = RESTING;
             this.shownGoal = 0;
             this.shownFade = POINTER_AWAY;
+            this.pressGoal = 0;
             this.startIn = -1;
+        }
+        if (line == null && this.drawn && !this.rung) {
+            for (let i = strings.lines.length - 1; i >= 0; i--) {
+                let candidate = strings.lines[i];
+                if (!candidate.leaving) {
+                    this.line = candidate;
+                    line = candidate;
+                    this.startIn = MISSED_WAIT;
+                    break;
+                }
+            }
         }
         // The pointer comes up and goes, presses in and comes out, and the
         // rings it leaves spread.
@@ -362,34 +349,30 @@ export class Guide {
             this.upAge = this.upAge + dt > RING ? -1 : this.upAge + dt;
         }
         if (line != null) {
-            if (!this.rung && this.step == RESTING && !this.pointerDown) {
+            if (!this.rung && this.step == RESTING && !this.pointerDown && this.lineStep == NO_LINE) {
                 if (this.startIn >= 0) {
                     this.startIn -= dt;
                     if (this.startIn <= 0) {
                         this.startIn = -1;
-                        this.begin(this.startPlucks, line, strings);
+                        this.begin(line, strings);
                     }
                 } else if (this.idle >= IDLE_WAIT) {
                     this.idle = 0;
-                    this.begin(1, line, strings);
+                    this.begin(line, strings);
                 }
             }
             this.movePluck(dt, line, strings);
         }
-        this.moveLine(dt, strings);
+        this.moveLine(dt);
     }
 
-    // Starts a showing of `plucks` plucks: the pointer appears below and to
-    // the right of where it will take hold.
-    private begin(plucks: i32, line: StringLine, strings: Strings): void {
+    // Shows one pluck, keeping the arriving pointer inside the viewport.
+    private begin(line: StringLine, strings: Strings): void {
         let at = strings.pointOn(line, TAKE_AT);
-        this.plucks = plucks;
-        this.plucked = 0;
         this.step = COMING;
         this.stepTime = 0;
-        this.comeTime = ENTER;
-        this.fromX = <f64>at.x + ENTER_X;
-        this.fromY = <f64>at.y + ENTER_Y;
+        this.fromX = Math.min(Math.max(<f64>at.x + ENTER_X, MARGIN), this.width - MARGIN);
+        this.fromY = Math.min(Math.max(<f64>at.y + ENTER_Y, MARGIN), this.height - MARGIN);
         this.tipX = this.fromX;
         this.tipY = this.fromY;
         this.shown = 0;
@@ -419,8 +402,8 @@ export class Guide {
             let at = strings.pointOn(line, TAKE_AT);
             let gx = <f64>at.x;
             let gy = <f64>at.y;
-            let t = Math.min(this.stepTime / this.comeTime, 1);
-            let e = this.comeTime == ENTER ? 1 - (1 - t) * (1 - t) * (1 - t) : smooth(t);
+            let t = Math.min(this.stepTime / ENTER, 1);
+            let e = 1 - (1 - t) * (1 - t) * (1 - t);
             let mx = 0.5 * (this.fromX + gx) + 0.18 * (gy - this.fromY);
             let my = 0.5 * (this.fromY + gy) - 0.18 * (gx - this.fromX);
             let u = 1 - e;
@@ -429,12 +412,24 @@ export class Guide {
             let dx = this.tipX - gx;
             let dy = this.tipY - gy;
             this.hover = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) / REACH);
-            if (this.stepTime >= this.comeTime) {
+            if (this.stepTime >= ENTER) {
                 // The click: it takes hold where the string stands.
                 line.hold(TAKE_AT);
                 this.pullFrom = line.finger;
-                let share = this.plucks >= 2 ? (this.plucked == 0 ? LIGHT : HARD) : ONCE;
-                this.depth = share * line.length * PULL_LIMIT;
+                // A user string may have either direction and sit by an
+                // edge. Pull toward the roomier side, within the viewport.
+                let toward = (0.5 * this.width - gx) * nx + (0.5 * this.height - gy) * ny;
+                let side = toward < 0 ? -1.0 : 1.0;
+                let dx = side * nx;
+                let dy = side * ny;
+                let room = Infinity;
+                if (Math.abs(dx) > 0.001) {
+                    room = Math.min(room, ((dx > 0 ? this.width - MARGIN : MARGIN) - gx) / dx);
+                }
+                if (Math.abs(dy) > 0.001) {
+                    room = Math.min(room, ((dy > 0 ? this.height - MARGIN : MARGIN) - gy) / dy);
+                }
+                this.depth = side * Math.min(ONCE * line.length * PULL_LIMIT, Math.max(room, 0));
                 this.pressGoal = 1;
                 this.downX = gx;
                 this.downY = gy;
@@ -466,7 +461,6 @@ export class Guide {
                 this.stepTime = 0;
             } else if (this.step == THROWING && this.stepTime >= THROW) {
                 line.letGo();
-                this.plucked++;
                 this.carry = 2 * (this.depth - this.pullFrom) / THROW;
                 this.pressGoal = 0;
                 this.upX = this.tipX;
@@ -487,21 +481,9 @@ export class Guide {
                 this.stepTime = 0;
                 this.fromX = this.tipX;
                 this.fromY = this.tipY;
-                if (this.plucked < this.plucks) {
-                    this.step = WAITING;
-                } else {
-                    this.step = LEAVING;
-                    this.shownGoal = 0;
-                    this.shownFade = LEAVE;
-                }
-            }
-            return;
-        }
-        if (this.step == WAITING) {
-            if (this.stepTime >= WAIT) {
-                this.comeTime = RETURN;
-                this.step = COMING;
-                this.stepTime = 0;
+                this.step = LEAVING;
+                this.shownGoal = 0;
+                this.shownFade = LEAVE;
             }
             return;
         }
@@ -511,7 +493,6 @@ export class Guide {
             this.tipY = this.fromY + 14 * t;
             if (this.stepTime >= LEAVE) {
                 this.step = RESTING;
-                this.firstDone = true;
             }
             return;
         }
@@ -539,6 +520,8 @@ export class Guide {
         if (this.lineStep == DRAWING || this.lineStep == SHOWING) {
             return;
         }
+        x = Math.min(Math.max(x, MARGIN), this.width - MARGIN);
+        y = Math.min(Math.max(y, MARGIN), this.height - MARGIN);
         let length = Math.min(LINE_LENGTH, 0.35 * Math.min(this.width, this.height));
         let toward = x < 0.5 * this.width ? 1.0 : -1.0;
         let x1 = x + toward * length * Math.cos(LEAN);
@@ -548,33 +531,14 @@ export class Guide {
             Math.min(Math.max(y1, MARGIN), this.height - MARGIN));
     }
 
-    // Shows a line where the water is emptiest.
-    private showLineWhereEmpty(strings: Strings): void {
-        let bestX = 0.5 * this.width;
-        let bestY = 0.25 * this.height;
-        let bestRoom: f64 = -1;
-        for (let i = 0; i < 8; i++) {
-            let fx = i < 2 ? 0.5 : (i < 4 ? (i == 2 ? 0.2 : 0.8) : (i % 2 == 0 ? 0.27 : 0.73));
-            let fy = i < 2 ? (i == 0 ? 0.22 : 0.78) : (i < 4 ? 0.5 : (i < 6 ? 0.27 : 0.73));
-            let x = fx * this.width;
-            let y = fy * this.height;
-            let room = Infinity;
-            for (let s = 0; s < strings.lines.length; s++) {
-                let line = strings.lines[s];
-                if (!line.leaving) {
-                    room = Math.min(room, distanceTo(x, y, line));
-                }
-            }
-            if (room > bestRoom) {
-                bestRoom = room;
-                bestX = x;
-                bestY = y;
-            }
-        }
+    // Before any real string exists, show the drawing hint in the middle.
+    private showLineInMiddle(): void {
         let half = 0.5 * Math.min(LINE_LENGTH, 0.35 * Math.min(this.width, this.height));
         let dx = half * Math.cos(LEAN);
         let dy = half * Math.sin(LEAN);
-        this.startLine(bestX - dx, bestY - dy, bestX + dx, bestY + dy);
+        let cx = 0.5 * this.width;
+        let cy = 0.5 * this.height;
+        this.startLine(cx - dx, cy - dy, cx + dx, cy + dy);
     }
 
     // The pointer clicks at the start and drags to the end.
@@ -585,7 +549,10 @@ export class Guide {
         this.y1 = y1;
         this.lineStep = DRAWING;
         this.lineTime = 0;
+        this.lineProgress = 0;
         this.lineShown = 0;
+        this.lineStartIn = -1;
+        this.idle = 0;
         // Only one pointer is ever seen.
         this.step = RESTING;
         this.shown = 0;
@@ -596,14 +563,18 @@ export class Guide {
         this.downAge = 0;
     }
 
-    // Moves a line shown on by `dt`, and starts one after a long wait.
-    private moveLine(dt: f64, strings: Strings): void {
-        if (this.rung && !this.drawn && this.lineStep == NO_LINE && !this.pointerDown) {
-            this.sinceLine += dt;
-            if (this.sinceLine >= IDLE_WAIT && this.idleLines < MOST_IDLE_LINES) {
-                this.sinceLine = 0;
+    // Draw first, then wait for the visitor; idle reminders are bounded.
+    private moveLine(dt: f64): void {
+        if (!this.drawn && this.width > 0 && this.height > 0
+            && this.lineStep == NO_LINE && !this.pointerDown) {
+            if (this.lineStartIn >= 0) {
+                this.lineStartIn -= dt;
+                if (this.lineStartIn <= 0) {
+                    this.showLineInMiddle();
+                }
+            } else if (this.idle >= IDLE_WAIT && this.idleLines < MOST_IDLE_LINES) {
                 this.idleLines++;
-                this.showLineWhereEmpty(strings);
+                this.showLineInMiddle();
             }
         }
         if (this.lineStep == NO_LINE) {
@@ -617,6 +588,7 @@ export class Guide {
         }
         this.lineTime += dt;
         if (this.lineStep == DRAWING) {
+            this.lineProgress = smooth(this.lineTime / DRAW);
             this.lineShown = Math.min(1, this.lineShown + dt / POINTER_IN);
             if (this.lineTime >= DRAW) {
                 // Let go at the end of the line.
@@ -646,7 +618,7 @@ export class Guide {
         this.drawRing(renderer, this.upX, this.upY, this.upAge, 0.6);
         if (this.lineStep != NO_LINE && this.lineShown > 0.01) {
             let shown = smooth(this.lineShown);
-            let reach = this.lineStep == DRAWING ? smooth(this.lineTime / DRAW) : 1.0;
+            let reach = this.lineProgress;
             let ex = this.x0 + (this.x1 - this.x0) * reach;
             let ey = this.y0 + (this.y1 - this.y0) * reach;
             let path = this.path;
@@ -739,14 +711,4 @@ export class Guide {
         paint.color = Color.rgba(220, 235, 255, <i32>(210 * strength * (1 - t)));
         renderer.drawPath(ring, paint);
     }
-}
-
-// How far the point is from a string's rest line, in points.
-function distanceTo(x: f64, y: f64, line: StringLine): f64 {
-    let dx = line.bx - line.ax;
-    let dy = line.by - line.ay;
-    let along = Math.min(Math.max(((x - line.ax) * dx + (y - line.ay) * dy) / (line.length * line.length), 0), 1);
-    let px = line.ax + dx * along - x;
-    let py = line.ay + dy * along - y;
-    return Math.sqrt(px * px + py * py);
 }

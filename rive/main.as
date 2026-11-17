@@ -61,7 +61,7 @@ export class Main extends Layout {
         this.height = height;
         this.strings.height = height;
         this.medium.resize(width, height, scale);
-        this.guide.place(width, height, this.strings);
+        this.guide.resize(width, height);
     }
 
     override advance(seconds: f64): bool {
