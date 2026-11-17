@@ -93,7 +93,10 @@ export class Main extends Layout {
         this.syncControls();
         let stroke = this.strokeLine;
         if (stroke != null) {
-            this.strokeTime += Math.min(seconds, 0.1);
+            // Bound physics catch-up separately from the gesture's lifetime.
+            // A slow renderer must not stretch a 1.25-second stroke to seconds
+            // of extra sound by discarding elapsed time on each frame.
+            this.strokeTime += Math.max(seconds, 0);
             if (this.strokeTime >= 1.25) this.cancelGesture();
             else {
                 let at = this.strings.pointOn(stroke, 0.38);

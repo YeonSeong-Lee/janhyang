@@ -173,9 +173,13 @@ test("a touch stroke keeps its first finger and cancels without a stuck note", a
   await page.goto("/");
   await page.getByRole("button", { name: "활로 켜기", exact: true }).tap();
   await page.getByRole("button", { name: "연습 현 놓기" }).tap();
+  // The creation trigger is consumed on a Rive advance. Do not press the
+  // empty surface before the four strings have actually been created.
+  await expect(page.locator("#selection")).toContainText("전체 4개");
   const cdp = await context.newCDPSession(page);
   const finger = (id: number, x: number) => ({ id, x, y: 230, radiusX: 4, radiusY: 4, force: 0.5 });
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [finger(0, 153)] });
+  await expect(page.locator("#stage")).toHaveCSS("cursor", "grabbing");
   await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [finger(0, 175)] });
   await expect(page.locator("#bow-studio")).toHaveAttribute("data-sounding", "true");
   await expect(page.locator("#bow-note")).toHaveText("D4");

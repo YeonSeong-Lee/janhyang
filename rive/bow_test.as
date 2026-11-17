@@ -2,6 +2,7 @@ import { Tests } from "rive/test";
 import { Bow } from "./bow";
 import { Strings, STRING_STEP } from "./strings";
 import { Inputs, Note, Pluck } from "./pluck";
+import { Main } from "./main";
 
 function instrument(): Strings {
     let strings = new Strings();
@@ -31,6 +32,20 @@ function tone(samples: StaticArray<f32>, frequency: f64): f64 {
 
 export class BowTests extends Tests {
     override run(): void {
+        test("a timed stroke ends after elapsed time even when render frames are slow", (expect) => {
+            let scene = new Main();
+            let line = scene.strings.add(100, 200, 650, 200);
+            scene.bowMode = true;
+            scene.bow.press(300, 200, scene.strings);
+            scene.strokeLine = line;
+            scene.advance(0.8);
+            expect.that(scene.bow.down).is(true);
+            scene.advance(0.6);
+            expect.that(scene.bow.down).is(false);
+            expect.that(scene.strokeLine == null).is(true);
+            expect.that(line.bowStrength).is(0);
+        });
+
         test("a solo stroke locks one string until release", (expect) => {
             let strings = instrument();
             let bow = new Bow();
