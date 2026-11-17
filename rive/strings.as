@@ -18,7 +18,7 @@ const SHORTEST: f64 = 40;
 // its length. Up to PULL_GIVE of that it follows the pointer exactly; past
 // it the string pushes back harder the further it goes and never passes
 // PULL_MOST, so the hand feels the limit coming instead of hitting a wall.
-const PULL_LIMIT: f64 = 0.22;
+export const PULL_LIMIT: f64 = 0.22;
 const PULL_GIVE: f64 = 0.6;
 const PULL_MOST: f64 = 1.25;
 // Seconds the look of a string's tension takes to ease off once it goes
@@ -27,6 +27,8 @@ const EASE_TENSION: f64 = 0.35;
 const EASE_HOVER: f64 = 0.12;
 // Seconds a string let go takes to fade away.
 const LET_GO: f64 = 0.9;
+// Seconds a line let go too short takes to draw back into its start.
+const SHRINK: f64 = 0.25;
 /// Points along a string at which its shape and motion are handed to the
 /// surface, ends included. sim.wgsl holds the same number.
 export const SAMPLES: i32 = 32;
@@ -49,6 +51,13 @@ const AIR_PER_SWING: f64 = 0.05;
 const STIFFNESS_LOSS: f64 = 0.02;
 // Below this, in points, a string let go is taken as still.
 const STILL: f64 = 0.05;
+
+/// What the last release came to: nothing, a string rung, a new string
+/// drawn, or a tap on the water too short to be a string.
+export const RELEASED_NOTHING: i32 = 0;
+export const RELEASED_PLUCK: i32 = 1;
+export const RELEASED_STRING: i32 = 2;
+export const RELEASED_TAP: i32 = 3;
 
 // The scale the strings are tuned to: A minor pentatonic, in semitones
 // above A.
@@ -319,6 +328,11 @@ export class Strings {
     endX: f64 = 0;
     endY: f64 = 0;
     draft: Path = new Path();
+    // A line let go too short to be a string, drawing back into where it
+    // started: 1 as it is let go, falling to 0.
+    shrink: f64 = 0;
+    shrinkX: f64 = 0;
+    shrinkY: f64 = 0;
 
     // A string being held aside, and how far aside the finger holds it.
     held: StringLine? = null;
@@ -335,6 +349,11 @@ export class Strings {
     gripShown: f64 = 0;
 
     struck: Struck = new Struck();
+    /// What the last release came to, one of the RELEASED_ values, and for
+    /// a tap, where it fell.
+    released: i32 = RELEASED_NOTHING;
+    tapX: f64 = 0;
+    tapY: f64 = 0;
     paint: Paint = new Paint();
     dot: Path = new Path();
 
@@ -445,6 +464,7 @@ export class Strings {
     /// The pointer came up. Returns what to sound when a string was let
     /// go, or null when nothing rang.
     release(x: f64, y: f64): Struck? {
+        this.released = RELEASED_NOTHING;
         let line = this.held;
         if (line != null) {
             this.pull(x, y);
@@ -455,6 +475,7 @@ export class Strings {
             if (strength < 0.03) {
                 return null;
             }
+            this.released = RELEASED_PLUCK;
             this.struck.frequency = line.frequency;
             this.struck.strength = strength;
             return this.struck;
@@ -467,6 +488,15 @@ export class Strings {
             let dy = this.endY - this.startY;
             if (Math.sqrt(dx * dx + dy * dy) >= SHORTEST) {
                 this.add(this.startX, this.startY, this.endX, this.endY);
+                this.released = RELEASED_STRING;
+            } else {
+                this.released = RELEASED_TAP;
+                this.tapX = this.startX;
+                this.tapY = this.startY;
+                // Seen to draw back, so a line too short reads as too short.
+                this.shrink = 1;
+                this.shrinkX = this.endX;
+                this.shrinkY = this.endY;
             }
         }
         return null;
@@ -474,6 +504,7 @@ export class Strings {
 
     /// The pointer left: whatever was in hand is dropped without a sound.
     cancel(): void {
+        this.released = RELEASED_NOTHING;
         this.drawing = false;
         let line = this.held;
         if (line != null) {
@@ -502,6 +533,37 @@ export class Strings {
         return line;
     }
 
+    /// Takes a string away at once, without letting it fade.
+    remove(line: StringLine): void {
+        for (let i = this.lines.length - 1; i >= 0; i--) {
+            if (this.lines[i] == line) {
+                this.lines.splice(i, 1);
+            }
+        }
+        if (this.held == line) {
+            this.held = null;
+        }
+        if (this.hovered == line) {
+            this.hovered = null;
+        }
+        if (this.hoverDrawn == line) {
+            this.hoverDrawn = null;
+        }
+    }
+
+    /// True while the string is among those kept.
+    keeps(line: StringLine): bool {
+        if (line.leaving) {
+            return false;
+        }
+        for (let i = 0; i < this.lines.length; i++) {
+            if (this.lines[i] == line) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// Moves every moving string on by one STRING_STEP.
     step(): void {
         for (let i = 0; i < this.lines.length; i++) {
@@ -514,6 +576,7 @@ export class Strings {
         this.hoverShown = ease(this.hoverShown, hoverGoal, seconds, EASE_HOVER);
         let gripGoal = this.held != null ? 1.0 : 0.0;
         this.gripShown = ease(this.gripShown, gripGoal, seconds, EASE_HOVER);
+        this.shrink = Math.max(0, this.shrink - seconds / SHRINK);
         for (let i = this.lines.length - 1; i >= 0; i--) {
             let line = this.lines[i];
             if (line.leaving) {
@@ -554,16 +617,16 @@ export class Strings {
         }
     }
 
-    // Where a string stands at `along`, 0 to 1, in the scene.
-    private pointOn(line: StringLine, along: f64): Vector {
+    /// Where a string stands at `along`, 0 to 1, in the scene.
+    pointOn(line: StringLine, along: f64): Vector {
         let aside = line.swingAt(along);
         return Vector.xy(
             <f32>(line.ax + (line.bx - line.ax) * along - (line.by - line.ay) / line.length * aside),
             <f32>(line.ay + (line.by - line.ay) * along + (line.bx - line.ax) / line.length * aside));
     }
 
-    // A round mark at `at`: a soft halo and a bright centre.
-    private drawDot(renderer: Renderer, at: Vector, size: f64, glow: Color, core: Color): void {
+    /// A round mark at `at`: a soft halo and a bright centre.
+    drawDot(renderer: Renderer, at: Vector, size: f64, glow: Color, core: Color): void {
         let dot = this.dot;
         let paint = this.paint;
         dot.reset();
@@ -624,13 +687,30 @@ export class Strings {
                 Color.rgba(232, 242, 255, <i32>(200 * hoverShown)));
         }
         if (this.drawing) {
+            // Faint while too short to be a string, brightening as it gets
+            // long enough.
+            let dx = this.endX - this.startX;
+            let dy = this.endY - this.startY;
+            let enough = smooth((Math.sqrt(dx * dx + dy * dy) - 0.7 * SHORTEST) / (0.3 * SHORTEST));
             let draft = this.draft;
             draft.reset();
             draft.moveTo(Vector.xy(<f32>this.startX, <f32>this.startY));
             draft.lineTo(Vector.xy(<f32>this.endX, <f32>this.endY));
-            paint.thickness = 1.2;
+            paint.thickness = <f32>(1.0 + 0.3 * enough);
             paint.feather = 0;
-            paint.color = Color.rgba(232, 242, 255, 130);
+            paint.color = Color.rgba(232, 242, 255, <i32>(70 + 80 * enough));
+            renderer.drawPath(draft, paint);
+        } else if (this.shrink > 0) {
+            let left = smooth(this.shrink);
+            let draft = this.draft;
+            draft.reset();
+            draft.moveTo(Vector.xy(<f32>this.startX, <f32>this.startY));
+            draft.lineTo(Vector.xy(
+                <f32>(this.startX + (this.shrinkX - this.startX) * left),
+                <f32>(this.startY + (this.shrinkY - this.startY) * left)));
+            paint.thickness = 1.0;
+            paint.feather = 0;
+            paint.color = Color.rgba(232, 242, 255, <i32>(70 * left));
             renderer.drawPath(draft, paint);
         }
     }
@@ -656,14 +736,14 @@ function ease(from: f64, to: f64, seconds: f64, time: f64): f64 {
     return to + (from - to) * Math.exp(-seconds * 3 / time);
 }
 
-function smooth(t: f64): f64 {
+export function smooth(t: f64): f64 {
     let c = Math.min(Math.max(t, 0), 1);
     return c * c * (3 - 2 * c);
 }
 
 // The ink's colours, cold to hot, as show.wgsl paints them: deep blue, cyan,
 // amber, near white.
-function inkColor(amount: f64): Color {
+export function inkColor(amount: f64): Color {
     let a = Math.min(Math.max(amount, 0), 1);
     if (a < 0.33) {
         return Color.lerp(Color.rgb(13, 89, 242), Color.rgb(26, 217, 230), <f32>(a / 0.33));
@@ -674,6 +754,6 @@ function inkColor(amount: f64): Color {
     return Color.lerp(Color.rgb(255, 158, 38), Color.rgb(255, 242, 217), <f32>((a - 0.66) / 0.34));
 }
 
-function withAlpha(color: Color, alpha: i32): Color {
+export function withAlpha(color: Color, alpha: i32): Color {
     return Color.rgba(<i32>Color.red(color), <i32>Color.green(color), <i32>Color.blue(color), alpha);
 }

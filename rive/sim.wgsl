@@ -35,6 +35,10 @@ struct Sim {
     // How many of `strings` are in use.
     count: f32,
     pad: f32,
+    // A drop where a tap fell on the water: x and y in scene space, its
+    // radius as a fraction of the height, and how hard it pushes this step,
+    // 0 when there is none.
+    drop: vec4<f32>,
     strings: array<StringDrive, 12>,
 };
 
@@ -109,6 +113,14 @@ fn stringPush(p: vec2<f32>, line: StringDrive) -> f32 {
     return inside * strength * sign(moved) * line.drive.x;
 }
 
+// How hard a drop pushes the water at p this step: most at its centre,
+// falling off smoothly, round on a scene of any shape.
+fn dropPush(p: vec2<f32>) -> f32 {
+    let d = (p - sim.drop.xy) * vec2<f32>(sim.aspect, 1.0);
+    let r = max(sim.drop.z, 1e-4);
+    return sim.drop.w * exp(-dot(d, d) / (r * r));
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let size = vec2<i32>(textureDimensions(state));
@@ -136,6 +148,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             break;
         }
         velocity += stringPush(in.scene, sim.strings[i]);
+    }
+    if (sim.drop.w != 0.0) {
+        velocity += dropPush(in.scene);
     }
 
     // Ink is left where the surface moves, and settles slowly. It nears its

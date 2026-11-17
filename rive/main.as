@@ -6,8 +6,9 @@ import { Renderer } from "rive/renderer";
 import { PointerEvent } from "rive/events";
 import { Audio, AudioHandle } from "rive/audio";
 import { Medium, MAX_STRINGS, STEP } from "./medium";
-import { Strings, SAMPLES } from "./strings";
+import { Strings, SAMPLES, RELEASED_TAP } from "./strings";
 import { Inputs, Note, Pluck } from "./pluck";
+import { Guide } from "./guide";
 
 // The most time one draw catches the surface up on. A frame can come late,
 // and a headless capture advances many times before its single draw.
@@ -31,6 +32,7 @@ export class Main extends Layout {
     context: Context? = null;
     medium: Medium = new Medium();
     strings: Strings = new Strings();
+    guide: Guide = new Guide();
 
     inputs: Inputs = new Inputs();
     note: Note = new Note();
@@ -59,10 +61,12 @@ export class Main extends Layout {
         this.height = height;
         this.strings.height = height;
         this.medium.resize(width, height, scale);
+        this.guide.place(width, height, this.strings);
     }
 
     override advance(seconds: f64): bool {
         this.strings.advance(seconds);
+        this.guide.advance(seconds, this.strings);
         this.pending = Math.min(this.pending + seconds, MAX_CATCH_UP);
 
         return true;
@@ -96,6 +100,7 @@ export class Main extends Layout {
         this.wakeSound();
         this.pointerIsDown = true;
         this.strings.press(<f64>event.position.x, <f64>event.position.y);
+        this.guide.pressed(this.strings);
         event.hit();
     }
 
@@ -105,6 +110,8 @@ export class Main extends Layout {
             event.hit();
         } else {
             this.strings.hover(<f64>event.position.x, <f64>event.position.y);
+            let hovered = this.strings.hovered;
+            this.guide.hovering(hovered != null && hovered == this.guide.line);
         }
     }
 
@@ -115,6 +122,10 @@ export class Main extends Layout {
         this.pointerIsDown = false;
         let struck = this.strings.release(<f64>event.position.x, <f64>event.position.y);
         this.strings.unhover();
+        this.guide.released(this.strings);
+        if (this.strings.released == RELEASED_TAP) {
+            this.medium.drop(this.strings.tapX, this.strings.tapY);
+        }
         if (struck != null) {
             this.note.frequency = <f32>struck.frequency;
             this.note.gain = <f32>(0.25 + 0.75 * struck.strength);
@@ -127,6 +138,7 @@ export class Main extends Layout {
         this.pointerIsDown = false;
         this.strings.cancel();
         this.strings.unhover();
+        this.guide.left();
     }
 
     override draw(renderer: Renderer): void {
@@ -157,5 +169,6 @@ export class Main extends Layout {
         }
         medium.show(renderer, this.debug);
         this.strings.draw(renderer);
+        this.guide.draw(renderer, this.strings);
     }
 }

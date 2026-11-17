@@ -28,7 +28,14 @@ export const MAX_STRINGS: i32 = 12;
 export const STEP: f64 = STRING_STEP;
 
 const SIM_HEIGHT: u32 = 360;
-const HEADER_BYTES: i32 = 16;
+// The scene's shape, the bias, the string count and a spare float, then a
+// drop: sim.wgsl's Sim up to its strings.
+const HEADER_BYTES: i32 = 32;
+// A drop: its radius in points, how hard it pushes each step, and for how
+// many steps. Small and soft: an answer to a tap, not a pluck.
+const DROP_RADIUS: f64 = 10;
+const DROP_PUSH: f64 = 0.02;
+const DROP_STEPS: i32 = 8;
 // Per string: ends, drive, then SAMPLES offsets now and a step before.
 const STRING_BYTES: i32 = 32 + 8 * SAMPLES;
 const SIM_BYTES: u32 = <u32>(HEADER_BYTES + STRING_BYTES * MAX_STRINGS);
@@ -72,6 +79,11 @@ export class Medium {
     width: f64 = 0;
     height: f64 = 0;
     simWidth: u32 = 0;
+
+    // A drop on the water, in layout points, and the steps it still pushes.
+    dropX: f64 = 0;
+    dropY: f64 = 0;
+    dropSteps: i32 = 0;
 
     /// Makes what does not depend on the size. False when the file lacks a
     /// shader or the host cannot make a canvas.
@@ -223,6 +235,14 @@ export class Medium {
         }
     }
 
+    /// Lets a drop fall on the water at a point in layout points: a small
+    /// ring answering a tap on empty water.
+    drop(x: f64, y: f64): void {
+        this.dropX = x;
+        this.dropY = y;
+        this.dropSteps = DROP_STEPS;
+    }
+
     /// Advances the surface one STEP under the first `count` recorded
     /// strings. Call it while drawing.
     step(count: i32): void {
@@ -254,6 +274,14 @@ export class Medium {
         Buffer.writef32(bytes, 0, this.height > 0 ? this.width / this.height : 1);
         Buffer.writef32(bytes, 4, this.bias);
         Buffer.writef32(bytes, 8, <f64>count);
+        let dropping = this.dropSteps > 0 && this.width > 0 && this.height > 0;
+        Buffer.writef32(bytes, 16, dropping ? this.dropX / this.width : 0);
+        Buffer.writef32(bytes, 20, dropping ? this.dropY / this.height : 0);
+        Buffer.writef32(bytes, 24, dropping ? DROP_RADIUS / this.height : 0);
+        Buffer.writef32(bytes, 28, dropping ? DROP_PUSH : 0);
+        if (dropping) {
+            this.dropSteps--;
+        }
         this.simUniforms!.update(0, bytes);
 
         attachment.loadOp = LoadOp.dontCare;
