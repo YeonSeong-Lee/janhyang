@@ -5,14 +5,15 @@ import { Layout, Context } from "rive/host";
 import { Renderer } from "rive/renderer";
 import { PointerEvent } from "rive/events";
 import { Audio, AudioHandle } from "rive/audio";
-import { PropertyBoolean, PropertyNumber, PropertyString } from "rive/data";
+import { PropertyNumber, PropertyString } from "rive/data";
 import { Color } from "rive/color";
 import { Medium, MAX_STRINGS, STEP } from "./medium";
-import { Strings, StringLine, Struck, SAMPLES, RELEASED_TAP, RELEASED_STRING, RELEASED_PLUCK } from "./strings";
+import { Strings, Struck, SAMPLES, RELEASED_TAP, RELEASED_STRING, RELEASED_PLUCK } from "./strings";
 import { Inputs, Note, Pluck } from "./pluck";
 import { Guide } from "./guide";
 import { Controls } from "./controls";
-import { Bow } from "./bow";
+import { harmonyId } from "./harmony";
+import { Phrase } from "./phrase";
 
 // The most time one draw catches the surface up on. A frame can come late,
 // and a headless capture advances many times before its single draw.
@@ -40,20 +41,13 @@ export class Main extends Layout {
     strings: Strings = new Strings();
     guide: Guide = new Guide();
     controls: Controls = new Controls();
-    bow: Bow = new Bow();
-    bowMode: bool = false;
-    modeProperty: PropertyBoolean? = null;
+    phrase: Phrase = new Phrase();
     cursorProperty: PropertyString? = null;
     cancelProperty: PropertyNumber? = null;
-    contactsProperty: PropertyNumber? = null;
-    pressureProperty: PropertyNumber? = null;
-    levelProperty: PropertyNumber? = null;
-    directionProperty: PropertyNumber? = null;
-    polyphonicProperty: PropertyBoolean? = null;
-    strokeLine: StringLine? = null;
-    strokeTime: f64 = 0;
+    harmonyProperty: PropertyNumber? = null;
+    previewProperty: PropertyNumber? = null;
+    drawingProperty: PropertyNumber? = null;
     cancelSerial: f64 = 0;
-    bowSoundTime: f64 = 0;
     showSelection: bool = false;
     notesPlayed: i32 = 0;
 
@@ -86,86 +80,57 @@ export class Main extends Layout {
         this.strings.height = height;
         this.medium.resize(width, height, scale);
         this.guide.resize(width, height);
-        this.bow.resize(width, height);
     }
 
     override advance(seconds: f64): bool {
         this.syncControls();
-        let stroke = this.strokeLine;
-        if (stroke != null && seconds > 0) {
-            // Bound physics catch-up separately from the gesture's lifetime.
-            // A slow renderer must not stretch a 1.25-second stroke to seconds
-            // of extra sound by discarding elapsed time on each frame.
-            this.strokeTime += Math.max(seconds, 0);
-            if (this.strokeTime >= 1.25) this.cancelGesture();
-            else {
-                let at = this.strings.pointOn(stroke, 0.38);
-                let offset = (this.strokeTime / 1.25 - 0.5) * this.bow.halfLength;
-                this.bow.move(at.x + this.bow.dx * offset, at.y + this.bow.dy * offset, this.strings);
-            }
-        }
-        this.bow.advance(seconds, this.strings);
-        if (this.bow.sounding) this.guide.rung = true;
-        if (this.bowMode && (this.pointerIsDown || this.strokeLine != null)) {
-            this.bowSoundTime += seconds;
-            if (this.bowSoundTime >= 1.0 / 60) {
-                this.bowSoundTime = 0;
-                this.sendBowNotes();
-            }
-        }
-        this.publishGesture();
         this.strings.advance(seconds);
-        if (!this.bowMode) this.guide.advance(seconds, this.strings);
+        this.guide.advance(seconds, this.strings);
+        let wasPlaying = this.phrase.playing;
+        let line = this.phrase.advance(seconds);
+        if (wasPlaying && !this.phrase.playing) this.guide.left();
+        if (line != null) {
+            this.controls.selected = line;
+            let struck = this.controls.pluck(this.strings, this.phrase.step % 3 == 1 ? 0.48 : 0.32);
+            if (struck != null) this.soundNote(struck);
+        }
+        if (line != null || wasPlaying != this.phrase.playing) this.publishControls();
+        this.publishPreview();
         this.pending = Math.min(this.pending + seconds, MAX_CATCH_UP);
 
         return true;
     }
 
-    private publishGesture(): void {
-        let contacts = this.contactsProperty;
-        if (contacts != null && contacts.value != this.bow.contacts) contacts.value = this.bow.contacts;
-        let level = this.levelProperty;
-        let direction = this.directionProperty;
-        let rounded = Math.round(this.bow.level * 20) / 20;
-        if (level != null && level.value != rounded) level.value = rounded;
-        if (direction != null && direction.value != this.bow.direction) direction.value = this.bow.direction;
-    }
-
     private syncControls(): void {
         let context = this.context;
         if (context == null) return;
-        if (this.modeProperty == null) {
+        if (this.cursorProperty == null) {
             let model = context.viewModel();
             if (model == null) return;
-            this.modeProperty = model.getBoolean("bowMode");
             this.cursorProperty = model.getString("cursor");
             this.cancelProperty = model.getNumber("cancelGesture");
-            this.contactsProperty = model.getNumber("bowContacts");
-            this.pressureProperty = model.getNumber("bowPressure");
-            this.levelProperty = model.getNumber("bowLevel");
-            this.directionProperty = model.getNumber("bowDirection");
-            this.polyphonicProperty = model.getBoolean("bowPolyphonic");
+            this.harmonyProperty = model.getNumber("harmony");
+            this.previewProperty = model.getNumber("previewFrequency");
+            this.drawingProperty = model.getNumber("drawing");
         }
-        let polyphonic = this.polyphonicProperty;
-        if (polyphonic != null && polyphonic.value != this.bow.polyphonic) {
-            this.cancelGesture();
-            this.bow.polyphonic = polyphonic.value;
-        }
-        let pressure = this.pressureProperty;
-        if (pressure != null) this.bow.pressure = Math.max(0, Math.min(1, pressure.value));
-        let mode = this.modeProperty;
         let cancel = this.cancelProperty;
-        if (mode != null && mode.value != this.bowMode) {
-            this.cancelGesture();
-            this.bowMode = mode.value;
-            this.guide.controlStarted(this.strings);
-            this.guide.left();
-            this.setCursor(this.bowMode ? "grab" : "crosshair");
-        }
         if (cancel != null && cancel.value != this.cancelSerial) {
             this.cancelSerial = cancel.value;
             this.cancelGesture();
         }
+        let harmony = this.harmonyProperty;
+        if (harmony != null && harmonyId(harmony.value) != this.strings.harmony) {
+            this.beginControl();
+            this.strings.tune(harmonyId(harmony.value));
+            this.publishControls();
+        }
+    }
+
+    private publishPreview(): void {
+        let preview = this.previewProperty;
+        let drawing = this.drawingProperty;
+        if (preview != null) preview.value = this.strings.previewFrequency;
+        if (drawing != null) drawing.value = this.strings.drawing ? 1 : 0;
     }
 
     private setCursor(value: string): void {
@@ -173,44 +138,17 @@ export class Main extends Layout {
         if (cursor != null && cursor.value != value) cursor.value = value;
     }
 
-    private sendBowNotes(): void {
-        let count = 0;
-        let lines = this.strings.lines;
-        for (let i = 0; i < lines.length; i++) {
-            if (!lines[i].leaving && lines[i].bowStrength > 0) count++;
-        }
-        let balance = 1 / Math.sqrt(Math.max(1, count));
-        let voice = 0;
-        for (let i = 0; i < lines.length && voice < 12; i++) {
-            let line = lines[i];
-            if (line.leaving) continue;
-            this.note.voice = voice++;
-            this.note.frequency = <f32>line.frequency;
-            this.note.gain = line.bowStrength > 0 ? <f32>(balance * (0.45 + 0.55 * this.bow.pressure)) : 0;
-            this.note.velocity = <f32>Math.max(-1, Math.min(1, this.bow.velocity / 420));
-            this.note.pressure = <f32>this.bow.pressure;
-            this.note.position = <f32>line.bowAt;
-            this.inputs.notes.send(this.note);
-        }
-        while (voice < 12) {
-            this.note.voice = voice++;
-            this.note.gain = 0;
-            this.inputs.notes.send(this.note);
-        }
-    }
-
     private cancelGesture(): void {
+        let wasPlaying = this.phrase.playing;
+        this.phrase.stop();
         this.pointerIsDown = false;
         this.pointerId = -1;
-        this.strokeLine = null;
-        this.strokeTime = 0;
         this.strings.cancel();
         this.strings.unhover();
-        this.bow.cancel(this.strings);
-        this.sendBowNotes();
         this.guide.left();
-        this.setCursor(this.bowMode ? "grab" : "crosshair");
-        this.publishGesture();
+        this.setCursor("crosshair");
+        this.publishPreview();
+        if (wasPlaying) this.publishControls();
     }
 
     // Starts the sound, or starts it again after it failed. It waits for a
@@ -240,32 +178,22 @@ export class Main extends Layout {
     override pointerDown(event: PointerEvent): void {
         this.syncControls();
         if (this.pointerIsDown) return;
-        if (this.strokeLine != null) this.cancelGesture();
+        this.phrase.stop();
         this.showSelection = false;
         this.wakeSound();
         this.pointerIsDown = true;
         this.pointerId = event.id;
-        if (this.bowMode) {
-            this.bow.press(event.position.x, event.position.y, this.strings);
-            this.controls.selected = this.strings.nearestTo(event.position.x, event.position.y);
-            this.publishControls();
-        }
-        else this.strings.press(<f64>event.position.x, <f64>event.position.y);
+        this.strings.press(<f64>event.position.x, <f64>event.position.y);
         if (this.strings.held != null) this.controls.selected = this.strings.held;
         this.guide.pressed(this.strings);
-        this.setCursor(this.bowMode || this.strings.held != null ? "grabbing" : "crosshair");
+        this.setCursor(this.strings.held != null ? "grabbing" : "crosshair");
+        this.publishControls();
         event.hit();
     }
 
     override pointerMove(event: PointerEvent): void {
         this.syncControls();
-        if (this.strokeLine != null) return;
         if (this.pointerIsDown && event.id != this.pointerId) return;
-        if (this.bowMode) {
-            this.bow.move(event.position.x, event.position.y, this.strings);
-            event.hit();
-            return;
-        }
         if (this.pointerIsDown) {
             this.strings.drag(<f64>event.position.x, <f64>event.position.y);
             event.hit();
@@ -278,20 +206,14 @@ export class Main extends Layout {
     }
 
     override pointerUp(event: PointerEvent): void {
+        // Escape/blur can arrive between the last frame and pointer-up.
+        // Apply cancellation before committing a stroke or sounding a pluck.
+        this.syncControls();
         if (!this.pointerIsDown || event.id != this.pointerId) {
             return;
         }
         this.pointerIsDown = false;
         this.pointerId = -1;
-        if (this.bowMode) {
-            this.bow.cancel(this.strings);
-            this.sendBowNotes();
-            this.bow.move(event.position.x, event.position.y, this.strings);
-            this.guide.left();
-            this.setCursor("grab");
-            event.hit();
-            return;
-        }
         let struck = this.strings.release(<f64>event.position.x, <f64>event.position.y);
         this.strings.unhover();
         this.guide.released(this.strings);
@@ -311,7 +233,6 @@ export class Main extends Layout {
     }
 
     private soundNote(struck: Struck): void {
-        this.note.voice = -1;
         this.note.frequency = <f32>struck.frequency;
         this.note.gain = <f32>(0.25 + 0.75 * struck.strength);
         this.inputs.notes.send(this.note);
@@ -327,10 +248,31 @@ export class Main extends Layout {
     }
 
     @input createString(): void {
+        this.syncControls();
         this.beginControl();
         this.controls.create(this.strings, this.width, this.height, this.lengthFraction);
         this.strings.released = RELEASED_STRING;
         this.guide.released(this.strings);
+        this.publishControls();
+    }
+
+    @input harmonyStrings(): void {
+        this.syncControls();
+        this.beginControl();
+        this.controls.seed(this.strings, this.width, this.height);
+        this.strings.released = RELEASED_STRING;
+        this.guide.released(this.strings);
+        this.publishControls();
+    }
+
+    @input playPhrase(): void {
+        this.syncControls();
+        let wasPlaying = this.phrase.playing;
+        this.beginControl();
+        if (!wasPlaying) {
+            this.wakeSound();
+            this.phrase.start(this.strings);
+        }
         this.publishControls();
     }
 
@@ -356,53 +298,6 @@ export class Main extends Layout {
         this.publishControls();
     }
 
-    @input bowStroke(): void {
-        this.syncControls();
-        if (!this.bowMode) return;
-        this.beginControl();
-        let line = this.controls.current(this.strings);
-        if (line == null) return;
-        this.wakeSound();
-        let at = this.strings.pointOn(line, 0.38);
-        let dx = -(line.by - line.ay) / line.length;
-        let dy = (line.bx - line.ax) / line.length;
-        this.bow.press(at.x - dx * this.bow.halfLength * 0.5,
-            at.y - dy * this.bow.halfLength * 0.5, this.strings);
-        // Use the selected string's orientation even if its neighbours are
-        // closer to the frog at the start of this accessible stroke.
-        this.bow.dx = dx;
-        this.bow.dy = dy;
-        this.bow.focused = line;
-        this.strokeLine = line;
-        // Start the first small movement with the command itself. Otherwise
-        // a frame longer than the stroke can skip straight from press to end
-        // without ever sending an audible note.
-        let firstStep = this.bow.halfLength / (1.25 * 60);
-        this.bow.move(at.x - dx * this.bow.halfLength * 0.5 + dx * firstStep,
-            at.y - dy * this.bow.halfLength * 0.5 + dy * firstStep, this.strings);
-        this.bow.advance(1.0 / 60, this.strings);
-        this.sendBowNotes();
-        this.setCursor("grabbing");
-        this.publishGesture();
-    }
-
-    @input practiceStrings(): void {
-        this.beginControl();
-        // This is an empty-state action, never replace someone's instrument.
-        if (this.controls.kept(this.strings).length > 0) return;
-        let landscape = this.width >= 700 && this.height <= 560;
-        let usableWidth = landscape ? this.width - 360 : this.width;
-        for (let i = 0; i < 4; i++) {
-            let x = usableWidth * (0.28 + <f64>i * 0.145);
-            let bottom = landscape ? 0.76 : 0.47;
-            let line = this.strings.add(x, this.height * 0.19, x, this.height * (bottom - <f64>i * 0.025));
-            line.frequency = 196 * Math.pow(1.498307, <f64>i);
-            if (i == 1) this.controls.selected = line;
-        }
-        this.guide.rung = true;
-        this.publishControls();
-    }
-
     private publishControls(): void {
         let context = this.context;
         if (context == null) return;
@@ -418,10 +313,12 @@ export class Main extends Layout {
         let selection = vm.getNumber("selectedString");
         let frequency = vm.getNumber("frequency");
         let notes = vm.getNumber("notesPlayed");
+        let demo = vm.getNumber("demoPlaying");
         if (count != null) count.value = <f64>lines.length;
         if (selection != null) selection.value = <f64>index;
         if (frequency != null) frequency.value = selected != null ? selected.frequency : 0;
         if (notes != null) notes.value = <f64>this.notesPlayed;
+        if (demo != null) demo.value = this.phrase.playing ? 1 : 0;
     }
 
     override pointerExit(event: PointerEvent): void {
@@ -456,8 +353,7 @@ export class Main extends Layout {
         }
         medium.show(renderer, this.debug);
         this.strings.draw(renderer);
-        if (this.bowMode) this.bow.draw(renderer, this.strings);
-        else this.guide.draw(renderer, this.strings);
+        this.guide.draw(renderer, this.strings);
         let selected = this.controls.current(this.strings);
         if (this.showSelection && selected != null) {
             this.strings.drawDot(renderer, this.strings.pointOn(selected, 0.5), 4,

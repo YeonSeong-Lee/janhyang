@@ -8,24 +8,22 @@ export interface InstrumentState {
   selected: number;
   frequency: number;
   notesPlayed: number;
+  demoPlaying: boolean;
 }
 
 export interface GestureState {
   cursor: string;
-  contacts: number;
-  level: number;
-  direction: number;
+  drawing: boolean;
+  previewFrequency: number;
 }
 
 export interface Player {
   play(): void;
   pause(): void;
-  setBowMode(enabled: boolean): void;
-  setBowPressure(pressure: number): void;
-  setBowPolyphonic(enabled: boolean): void;
-  practiceStrings(): void;
-  bowStroke(): void;
   stopGesture(): void;
+  setHarmony(id: number): void;
+  harmonyStrings(): void;
+  playPhrase(): void;
   createString(length: number): void;
   selectString(direction: -1 | 1): void;
   pluckString(strength: number): void;
@@ -86,26 +84,25 @@ export async function createPlayer(
   const previous = model?.trigger("previousString");
   const next = model?.trigger("nextString");
   const pluck = model?.trigger("pluckString");
-  const bowMode = model?.boolean("bowMode");
   const cursor = model?.string("cursor");
   const cancelGesture = model?.number("cancelGesture");
-  const bowContacts = model?.number("bowContacts");
-  const bowPressure = model?.number("bowPressure");
-  const bowLevel = model?.number("bowLevel");
-  const bowDirection = model?.number("bowDirection");
-  const bowPolyphonic = model?.boolean("bowPolyphonic");
-  const practice = model?.trigger("practiceStrings");
-  const stroke = model?.trigger("bowStroke");
+  const harmony = model?.number("harmony");
+  const previewFrequency = model?.number("previewFrequency");
+  const drawing = model?.number("drawing");
+  const demoPlaying = model?.number("demoPlaying");
+  const seed = model?.trigger("harmonyStrings");
+  const phrase = model?.trigger("playPhrase");
   if (!count || !selected || !frequency || !notesPlayed || !lengthFraction || !pluckStrength ||
-      !create || !previous || !next || !pluck || !bowMode || !cursor || !cancelGesture || !bowContacts ||
-      !bowPressure || !bowLevel || !bowDirection || !bowPolyphonic || !practice || !stroke) {
+      !create || !previous || !next || !pluck || !cursor || !cancelGesture || !harmony ||
+      !previewFrequency || !drawing || !demoPlaying || !seed || !phrase) {
     rive.cleanup();
     throw new Error("The instrument's controls are missing from the Rive file");
   }
-  const stateProperties = [count, selected, frequency, notesPlayed];
+  const stateProperties = [count, selected, frequency, notesPlayed, demoPlaying];
   let previousState: InstrumentState | undefined;
   const emitState = () => {
-    const state = { count: count.value, selected: selected.value, frequency: frequency.value, notesPlayed: notesPlayed.value };
+    const state = { count: count.value, selected: selected.value, frequency: frequency.value,
+      notesPlayed: notesPlayed.value, demoPlaying: demoPlaying.value > 0 };
     // Several properties can change in one Rive advance. Announce that
     // resulting state once, after the runtime has applied the whole action.
     if (previousState && Object.keys(state).every((key) =>
@@ -117,27 +114,22 @@ export async function createPlayer(
   emitState();
 
   let playing = false;
-  let pressure = 0.5;
-  let pen: number | undefined;
   let owner: number | undefined;
   const events = new AbortController();
   const emitGesture = () => {
     const value = playing ? cursor.value : "default";
     canvas.style.cursor = ["grab", "grabbing", "crosshair"].includes(value) ? value : "default";
-    onGestureChange({ cursor: value, contacts: playing ? bowContacts.value : 0,
-      level: playing ? bowLevel.value : 0, direction: bowDirection.value });
+    onGestureChange({ cursor: value, drawing: playing && drawing.value > 0,
+      previewFrequency: playing ? previewFrequency.value : 0 });
   };
   const cancel = () => {
     cancelGesture.value++;
-    pen = undefined;
     owner = undefined;
-    bowPressure.value = pressure;
-    canvas.style.cursor = playing ? (bowMode.value ? "grab" : "crosshair") : "default";
+    canvas.style.cursor = playing ? "crosshair" : "default";
   };
   cursor.on(emitGesture);
-  bowContacts.on(emitGesture);
-  bowLevel.on(emitGesture);
-  bowDirection.on(emitGesture);
+  previewFrequency.on(emitGesture);
+  drawing.on(emitGesture);
   window.addEventListener("blur", cancel, { signal: events.signal });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) cancel();
@@ -147,22 +139,13 @@ export async function createPlayer(
   };
   canvas.addEventListener("pointercancel", cancelPointer, { signal: events.signal });
   canvas.addEventListener("lostpointercapture", cancelPointer, { signal: events.signal });
-  // Mouse and touch use the explicit pressure control. Only a pen's pressure
-  // is a measured force, so do not mistake a mouse's conventional 0.5 for it.
+  // A secondary finger releasing capture must not cancel the held string.
   canvas.addEventListener("pointerdown", (event) => {
     if (!playing || owner !== undefined) return;
     owner = event.pointerId;
-    if (bowMode.value && event.pointerType === "pen") {
-      pen = event.pointerId;
-      bowPressure.value = Math.max(0.08, event.pressure);
-    }
-  }, { signal: events.signal });
-  canvas.addEventListener("pointermove", (event) => {
-    if (event.pointerId === pen) bowPressure.value = Math.max(0.08, event.pressure);
   }, { signal: events.signal });
   window.addEventListener("pointerup", (event) => {
     if (event.pointerId === owner) owner = undefined;
-    if (event.pointerId === pen) { pen = undefined; bowPressure.value = pressure; }
   }, { signal: events.signal });
 
   let resizeFrame = 0;
@@ -211,18 +194,10 @@ export async function createPlayer(
       emitGesture();
       note("pause");
     },
-    setBowMode(enabled) {
-      cancel();
-      bowMode.value = enabled;
-    },
-    setBowPressure(value) {
-      pressure = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0.5));
-      if (pen === undefined) bowPressure.value = pressure;
-    },
-    setBowPolyphonic(enabled) { cancel(); bowPolyphonic.value = enabled; },
-    practiceStrings() { cancel(); practice.trigger(); },
-    bowStroke() { cancel(); stroke.trigger(); },
     stopGesture() { cancel(); },
+    setHarmony(id) { cancel(); harmony.value = id === 1 || id === 2 ? id : 0; },
+    harmonyStrings() { seed.trigger(); },
+    playPhrase() { phrase.trigger(); },
     createString(length) {
       lengthFraction.value = length;
       create.trigger();
@@ -237,9 +212,8 @@ export async function createPlayer(
     cleanup() {
       events.abort();
       cursor.off(emitGesture);
-      bowContacts.off(emitGesture);
-      bowLevel.off(emitGesture);
-      bowDirection.off(emitGesture);
+      previewFrequency.off(emitGesture);
+      drawing.off(emitGesture);
       for (const property of stateProperties) property.off(emitState);
       observer.disconnect();
       resolution.removeEventListener("change", watchResolution);

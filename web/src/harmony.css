@@ -1,0 +1,43 @@
+/* Keep the water as the instrument; a compact tuning bench sits below it. */
+#harmony-panel {
+  --water: #b9dfff;
+  position: fixed;
+  z-index: 2;
+  inset-inline-start: max(16px, env(safe-area-inset-left));
+  inset-block-end: max(76px, calc(env(safe-area-inset-bottom) + 64px));
+  width: min(440px, calc(100% - 32px));
+  padding: 14px 18px 12px;
+  background: #0b1019f5;
+  border: 1px solid #3e526a;
+  border-radius: 14px;
+}
+.harmony-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.harmony-heading h2 { margin: 0; font-size: 16px; font-weight: 500; }
+#harmony-chord { margin-inline-start: 8px; color: var(--water); font-weight: 400; }
+#harmony-toggle { padding: 8px; min-height: 44px; border: 0; background: transparent; color: #b4c5d8; font-size: 13px; }
+.harmony-tuning { display: flex; align-items: center; gap: 14px; margin-top: 2px; }
+#harmony-mood { width: 116px; padding: 6px 10px; border-color: #5c7088; border-radius: 6px; font-size: 14px; }
+#harmony-notes { flex: 1; display: flex; justify-content: center; gap: 6px; }
+.harmony-tone { display: grid; place-items: center; min-width: 32px; height: 36px; border-bottom: 2px solid #3e526a; color: #adbed3; font-size: 16px; }
+.harmony-tone[data-active="true"] { color: #ecf7ff; border-color: var(--water); background: #203349; border-radius: 4px 4px 0 0; }
+#harmony-note { min-width: 42px; text-align: end; color: #e6f3ff; font-size: 20px; font-variant-numeric: tabular-nums; }
+#harmony-description, #harmony-feedback { color: #adbed3; font-size: 12px; line-height: 1.6; margin: 8px 0 0; overflow-wrap: anywhere; }
+.harmony-actions { display: flex; gap: 8px; margin-top: 12px; }
+.harmony-actions button { flex: 1; min-width: 0; padding-inline: 8px; font-size: 14px; border-color: #5c7088; }
+#harmony-seed, #harmony-pluck { background: #1d3348; border-color: #7a9bb9; }
+#harmony-demo[aria-pressed="true"] { color: #e6f3ff; background: #203349; border-color: var(--water); }
+#harmony-panel[data-drawing="true"] { border-color: #b9dfff; }
+#harmony-panel[data-collapsed="true"] { width: fit-content; padding-block: 4px; }
+.controls { z-index: 3; }
+#notice.message { z-index: 4; }
+#report { z-index: 5; pointer-events: none; }
+@media (max-width: 480px) {
+  #harmony-panel { padding-inline: 12px; }
+  .harmony-tuning { gap: 8px; }
+  #harmony-mood { width: 104px; }
+  .harmony-tone { min-width: 28px; }
+  .harmony-actions button { font-size: 13px; }
+}
+@media (max-height: 500px) and (min-width: 600px) {
+  #harmony-panel { width: 320px; inset-inline-start: auto; inset-inline-end: 16px; }
+}

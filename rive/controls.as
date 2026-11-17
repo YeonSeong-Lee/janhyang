@@ -1,6 +1,7 @@
 // Discrete alternatives to drawing and dragging. Selection refers to the
 // real strings, including ones drawn with a pointer, not a second list.
 import { Strings, StringLine, Struck, PULL_LIMIT } from "./strings";
+import { chordMidi, frequencyOf } from "./harmony";
 
 export class Controls {
     selected: StringLine? = null;
@@ -30,6 +31,25 @@ export class Controls {
         let line = strings.add(x, y, x + length, y);
         this.selected = line;
         return line;
+    }
+
+    seed(strings: Strings, width: f64, height: f64): void {
+        if (this.kept(strings).length > 0) return;
+        // Leave the bottom of even a small phone free for the harmony panel.
+        let landscape = width >= 600 && height <= 500;
+        let areaWidth = landscape ? width - 368 : width;
+        let bottom = landscape ? height - 76 : Math.max(184, Math.min(height * 0.48, height - 340));
+        let longest = Math.max(40, Math.min(areaWidth - 48, height * 0.68));
+        for (let degree = 0; degree < 3; degree++) {
+            let midi = chordMidi(strings.harmony, degree);
+            let length = longest * Math.pow(2, <f64>(chordMidi(strings.harmony, 0) - midi) / 12);
+            let x = (areaWidth - length) / 2;
+            let y = 84 + (bottom - 84) * <f64>degree / 2;
+            let line = strings.add(x, y, x + length, y);
+            line.chordDegree = degree;
+            line.frequency = frequencyOf(midi);
+            this.selected = line;
+        }
     }
 
     select(strings: Strings, direction: i32): void {

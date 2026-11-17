@@ -3,19 +3,13 @@
 // pitch can sound without a recorded sample.
 import { AudioProcessor } from "rive/audio";
 import { Ring } from "rive/shared";
-import { BowedVoice } from "./bowed";
 
 /// One pluck, sent from the scene to the audio thread.
 export class Note {
-    /// -1 is a pluck; 0..11 update a sustained bow voice without retriggering.
-    voice: i32 = -1;
     /// Pitch in Hz.
     frequency: f32 = 220;
     /// How hard it was struck, 0 to 1.
     gain: f32 = 0;
-    velocity: f32 = 0.55;
-    pressure: f32 = 0.5;
-    position: f32 = 0.5;
 }
 
 /// What the scene and the audio thread share.
@@ -52,18 +46,11 @@ export class Pluck extends AudioProcessor<Inputs> {
     nextVoice: i32 = 0;
     seed: u32 = 22222;
     asleep: bool = true;
-    bows: Array<BowedVoice> = [];
-
-    constructor() {
-        super();
-        for (let i = 0; i < VOICES; i++) this.bows.push(new BowedVoice());
-    }
 
     override init(sampleRate: f64, maxFrames: i32, channels: i32, inputs: Inputs): void {
         this.inputs = inputs;
         this.channels = channels;
         this.rate = <f32>sampleRate;
-        for (let i = 0; i < VOICES; i++) this.bows[i].init(this.rate);
     }
 
     // Noise in -1 to 1.
@@ -128,13 +115,7 @@ export class Pluck extends AudioProcessor<Inputs> {
             return;
         }
         while (inputs.notes.receiveInto(this.note)) {
-            let voice = this.note.voice;
-            if (voice < 0) {
-                this.strike(this.note);
-            } else if (voice < VOICES) {
-                this.bows[voice].update(this.note.frequency, this.note.gain,
-                    this.note.velocity, this.note.pressure, this.note.position);
-            }
+            this.strike(this.note);
         }
 
         let channels = this.channels;
@@ -167,25 +148,6 @@ export class Pluck extends AudioProcessor<Inputs> {
             this.heads[voice] = head;
             this.lasts[voice] = last;
             this.lives[voice] = life - frames;
-        }
-        for (let voice = 0; voice < VOICES; voice++) {
-            let bow = this.bows[voice];
-            if (!bow.active) continue;
-            anyAlive = true;
-            for (let i = 0; i < frames; i++) {
-                let mixed = bow.tick();
-                for (let c = 0; c < channels; c++) out[i * channels + c] += mixed;
-            }
-        }
-        for (let i = 0; i < frames * channels; i++) {
-            // Leave ordinary plucks untouched. Only a loud combined signal
-            // reaches this smooth ceiling below the output's full scale.
-            let sample = out[i];
-            let magnitude = Mathf.abs(sample);
-            if (magnitude > 0.8) {
-                let limited = 0.8 + 0.19 * (1 - Mathf.exp(-(magnitude - 0.8) / 0.19));
-                out[i] = sample < 0 ? -limited : limited;
-            }
         }
         this.asleep = !anyAlive;
     }

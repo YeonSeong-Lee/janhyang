@@ -5,6 +5,7 @@ import { Paint, PaintStyle, StrokeCap, StrokeJoin } from "rive/paint";
 import { Path } from "rive/path";
 import { Renderer } from "rive/renderer";
 import { Vector } from "rive/vector";
+import { naturalMidi, tunedPitch, chordMidi, frequencyOf } from "./harmony";
 
 /// The most strings kept; drawing one more lets the oldest go.
 export const MAX_KEPT: i32 = 12;
@@ -59,30 +60,10 @@ export const RELEASED_PLUCK: i32 = 1;
 export const RELEASED_STRING: i32 = 2;
 export const RELEASED_TAP: i32 = 3;
 
-// The scale the strings are tuned to: A minor pentatonic, in semitones
-// above A.
-const SCALE: StaticArray<i32> = [0, 3, 5, 7, 10];
-
 /// The pitch in Hz a string of `length` sounds, in a scene `height` tall.
-/// Twice the length is an octave lower, and the result is moved to the
-/// nearest note of the scale so that any set of strings sounds well together.
-export function pitchOf(length: f64, height: f64): f64 {
-    let relative = Math.max(length, 1) / Math.max(height, 1);
-    let free = 12 * Math.log2(1 / relative) + 12;
-    let nearest: f64 = 0;
-    let closest: f64 = Infinity;
-    for (let octave = -2; octave <= 4; octave++) {
-        for (let i = 0; i < SCALE.length; i++) {
-            let step = <f64>(octave * 12 + SCALE[i]);
-            let gap = Math.abs(step - free);
-            if (gap < closest) {
-                closest = gap;
-                nearest = step;
-            }
-        }
-    }
-    let frequency = 110 * Math.pow(2, nearest / 12);
-    return Math.min(Math.max(frequency, 65), 1320);
+/// Doubling its length lowers it by an octave, within a comfortable range.
+export function pitchOf(length: f64, height: f64, harmony: i32 = 0): f64 {
+    return tunedPitch(naturalMidi(length, height), harmony);
 }
 
 /// A string: a line of points held at both ends, each pulled toward its
@@ -98,6 +79,9 @@ export class StringLine {
     length: f64 = 1;
     /// Pitch in Hz it sounds.
     frequency: f64 = 220;
+    // Keep the original pitch intent across resizes and repeated retunings.
+    sourceMidi: f64 = 57;
+    chordDegree: i32 = -1;
     /// Swings a second it is seen to make, far slower than it sounds.
     rate: f64 = 8;
 
@@ -125,11 +109,6 @@ export class StringLine {
     finger: f64 = 0;
     /// Steps taken while held; none means the pull was never seen moving.
     stepsHeld: i32 = 0;
-    // A moving bow drives a point continuously; it never pins the string.
-    bowAt: f64 = 0.5;
-    bowStrength: f64 = 0;
-    bowDirection: f64 = 1;
-    bowPhase: f64 = 0;
 
     /// Points it moves in a STRING_STEP at the most when let go from its
     /// furthest pull at the middle: a corner runs at twice its length times
@@ -150,7 +129,7 @@ export class StringLine {
 
     path: Path = new Path();
 
-    constructor(ax: f64, ay: f64, bx: f64, by: f64, height: f64) {
+    constructor(ax: f64, ay: f64, bx: f64, by: f64, height: f64, harmony: i32 = 0) {
         this.ax = ax;
         this.ay = ay;
         this.bx = bx;
@@ -158,7 +137,8 @@ export class StringLine {
         let dx = bx - ax;
         let dy = by - ay;
         this.length = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-        this.frequency = pitchOf(this.length, height);
+        this.sourceMidi = naturalMidi(this.length, height);
+        this.frequency = tunedPitch(this.sourceMidi, harmony);
         this.rate = 5 + 2.4 * Math.log2(this.frequency / 65);
         // A wave crosses the string and back once per swing. Pick whole
         // steps per STRING_STEP, then the piece count that makes the wave run
@@ -232,7 +212,6 @@ export class StringLine {
 
     /// Moves the string on by one STRING_STEP.
     step(): void {
-        if (this.bowStrength > 0) this.awake = true;
         if (!this.awake) {
             return;
         }
@@ -248,7 +227,6 @@ export class StringLine {
         let fingerStart = this.finger;
         let fingerEnd = fingerStart + (this.fingerTarget - fingerStart) * (1 - Math.exp(-STRING_STEP * FINGER));
         this.finger = fingerEnd;
-        this.bowPhase += 2 * Math.PI * this.rate * STRING_STEP;
         for (let s = 0; s < this.substeps; s++) {
             // Tension pulls each point toward its neighbours; it keeps going
             // as it was going, less what the air takes.
@@ -263,16 +241,6 @@ export class StringLine {
             next[n] = 0;
             if (held >= 0) {
                 next[held] = fingerStart + (fingerEnd - fingerStart) * <f64>(s + 1) / <f64>this.substeps;
-            } else if (this.bowStrength > 0) {
-                let contact = <i32>Math.max(1, Math.min(n - 1, Math.round(this.bowAt * n)));
-                // A slow visual travelling corner: a long carry and a short
-                // slip, changing side when the hand reverses. Audio runs its
-                // own waveguide at sample rate (bowed.as).
-                let cycle = this.bowPhase / (2 * Math.PI);
-                cycle -= Math.floor(cycle);
-                let shape = cycle < 0.82 ? cycle / 0.82 * 2 - 1 : 1 - (cycle - 0.82) / 0.18 * 2;
-                let target = shape * this.bowDirection * Math.min(10, this.length * 0.025) * this.bowStrength;
-                next[contact] += (target - next[contact]) * 0.35 / <f64>this.substeps;
             }
             for (let i = 0; i <= n; i++) {
                 before[i] = now[i];
@@ -337,6 +305,26 @@ export class Struck {
 export class Strings {
     lines: Array<StringLine> = [];
     height: f64 = 1;
+    harmony: i32 = 0;
+
+    tune(harmony: i32): void {
+        this.harmony = harmony;
+        for (let i = 0; i < this.lines.length; i++) {
+            let line = this.lines[i];
+            if (line.leaving) continue;
+            line.frequency = line.chordDegree >= 0
+                ? frequencyOf(chordMidi(harmony, line.chordDegree))
+                : tunedPitch(line.sourceMidi, harmony);
+        }
+    }
+
+    get previewFrequency(): f64 {
+        if (!this.drawing) return 0;
+        let dx = this.endX - this.startX;
+        let dy = this.endY - this.startY;
+        let length = Math.sqrt(dx * dx + dy * dy);
+        return length >= SHORTEST ? pitchOf(length, this.height, this.harmony) : 0;
+    }
 
     // A line being drawn.
     drawing: bool = false;
@@ -408,11 +396,6 @@ export class Strings {
         }
         this.nearAlong = bestAlong;
         return best;
-    }
-
-    /// Used to orient the bow across the nearest string, including in gaps.
-    nearestTo(x: f64, y: f64): StringLine? {
-        return this.nearest(x, y, Infinity);
     }
 
     // Takes hold of the nearest string within reach of the point, if any,
@@ -551,7 +534,7 @@ export class Strings {
                 kept--;
             }
         }
-        let line = new StringLine(ax, ay, bx, by, this.height);
+        let line = new StringLine(ax, ay, bx, by, this.height, this.harmony);
         this.lines.push(line);
         return line;
     }
@@ -693,7 +676,7 @@ export class Strings {
             // Taut, the string takes on the colour the ink it leaves will
             // have, cold to hot, and burns brighter and finer; a string the
             // pointer is over lifts a little.
-            let tension = Math.max(line.tension, line.bowStrength * 0.7);
+            let tension = line.tension;
             let lift = hoverDrawn == line && this.held == null ? hoverShown : 0;
             let heat = inkColor(0.15 + 0.7 * tension);
             let glowAlpha = (70 + 40 * lift + 120 * tension) * presence;
