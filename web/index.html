@@ -4,39 +4,74 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#05070b" />
+    <meta name="description" content="수면에 선을 그어 현을 만들고, 당겼다 놓아 소리와 파문을 만드는 잔향." />
     <title>잔향</title>
     <style>
-      html, body { margin: 0; height: 100%; background: #05070b; overflow: hidden; }
-      #stage { display: block; width: 100vw; height: 100dvh; touch-action: none; }
-      #report {
-        position: fixed; left: 12px; bottom: 12px; margin: 0; padding: 8px 10px;
-        max-width: calc(100vw - 24px); box-sizing: border-box;
-        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-        color: #c9d4e3; background: rgb(5 7 11 / 0.8); border: 1px solid #1c2531;
-        border-radius: 6px; white-space: pre-wrap; pointer-events: none;
+      :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #e0e8f3; background: #05070b; }
+      * { box-sizing: border-box; }
+      body { margin: 0; }
+      main { position: relative; min-height: 100dvh; }
+      #stage { display: block; width: 100%; height: 100dvh; touch-action: none; }
+      .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      .controls {
+        position: fixed;
+        inset-inline-end: max(12px, env(safe-area-inset-right));
+        inset-block-end: max(12px, env(safe-area-inset-bottom));
+        display: flex; gap: 8px; align-items: end;
+        max-width: calc(100% - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)));
       }
-      #report[hidden] { display: none; }
+      button, summary { min-height: 44px; padding: 10px 14px; font: inherit; cursor: pointer; }
+      button, details, .message, #report { border: 1px solid #67778e; border-radius: 8px; background: #0b1019; color: inherit; }
+      button { flex-shrink: 0; }
+      button[aria-disabled="true"] { cursor: wait; }
+      :where(button, summary, a, pre):focus-visible { outline: 2px solid #b9dfff; outline-offset: 3px; }
+      details { min-width: 0; max-width: 32rem; max-height: 70dvh; overflow: auto; }
+      summary { overflow-wrap: anywhere; }
+      details p { margin: 0; padding: 0 14px 14px; line-height: 1.6; }
+      .message {
+        position: absolute;
+        inset-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+        inset-block-start: max(12px, env(safe-area-inset-top));
+        width: fit-content; max-width: 36rem; margin-inline: auto;
+        padding: 12px 16px; line-height: 1.6; overflow-wrap: anywhere;
+      }
+      #status { margin: 0; }
+      #retry { margin-top: 12px; }
+      #report {
+        position: fixed;
+        inset-inline-start: max(12px, env(safe-area-inset-left));
+        inset-block-end: max(72px, calc(env(safe-area-inset-bottom) + 60px));
+        margin: 0; padding: 8px 10px;
+        max-width: calc(100% - 24px); max-height: 40dvh; overflow: auto;
+        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap; overflow-wrap: anywhere;
+      }
+      [hidden] { display: none !important; }
     </style>
   </head>
   <body>
-    <canvas id="stage"></canvas>
-    <pre id="report" hidden></pre>
-    <script>
-      // Without isolation headers from the server, install the worker that
-      // adds them and load once more under it. Reload only once, so a
-      // browser that refuses service workers still gets the page.
-      if (!window.crossOriginIsolated && "serviceWorker" in navigator
-          && !sessionStorage.getItem("coi-reloaded")) {
-        navigator.serviceWorker.register("./coi.js").then((registration) => {
-          const reload = () => {
-            try { sessionStorage.setItem("coi-reloaded", "1"); } catch {}
-            location.reload();
-          };
-          if (registration.active && !navigator.serviceWorker.controller) reload();
-          else navigator.serviceWorker.addEventListener("controllerchange", reload);
-        });
-      }
-    </script>
+    <main>
+      <h1 class="visually-hidden">잔향</h1>
+      <canvas id="stage" width="1280" height="720" role="img" aria-label="현과 파문으로 연주하는 수면" aria-describedby="instructions">
+        수면에 선을 그어 현을 만들고, 당겼다 놓아 소리와 파문을 만드는 작품입니다.
+      </canvas>
+      <p id="loading" class="message" hidden>수면을 준비하고 있습니다…</p>
+      <div id="notice">
+        <p id="status" role="status"></p>
+        <button id="retry" type="button" hidden>다시 불러오기</button>
+      </div>
+      <div class="controls">
+        <button id="playback" type="button" aria-controls="stage" hidden>재생</button>
+        <details>
+          <summary>사용 안내</summary>
+          <p id="instructions">빈 수면을 마우스나 손가락으로 드래그해 현을 만드세요. 만든 현을 옆으로 당겼다 놓으면 소리와 파문이 퍼집니다. 현 만들기와 연주는 마우스 또는 터치가 필요합니다.</p>
+          <p>일시정지를 누르면 움직임과 소리가 멈춥니다. 움직임 줄이기 설정을 사용 중이면 재생을 눌러 시작할 수 있습니다.</p>
+        </details>
+      </div>
+      <pre id="report" role="region" aria-label="진단 정보" tabindex="0" hidden></pre>
+      <noscript><p class="message">잔향은 JavaScript로 소리와 파문을 만듭니다. 브라우저에서 JavaScript를 켜고 다시 열어 주세요.</p></noscript>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

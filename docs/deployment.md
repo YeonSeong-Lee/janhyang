@@ -3,7 +3,7 @@
 배포 주소: [janhyang-924.pages.dev](https://janhyang-924.pages.dev/)
 
 자동 배포는 [GitHub Actions의 CI/CD 워크플로](https://github.com/YeonSeong-Lee/janhyang/actions/workflows/ci-cd.yml)를 사용합니다.
-`main` 대상 PR에서는 의존성 설치, 타입 검사, Vite 빌드를 수행합니다.
+`main` 대상 PR에서는 의존성 설치, 타입 검사, Vite 빌드, Chromium 회귀 테스트를 수행합니다.
 `main`에 푸시하면 같은 검사를 통과한 빌드 결과를 Cloudflare Pages에 배포합니다.
 배포 작업은 검사 작업이 만든 아티팩트를 사용하며, 아티팩트는 하루 동안 보관합니다.
 
@@ -19,7 +19,7 @@
 | Production branch | `main` |
 | Actions 작업 디렉터리 | `web` |
 | 의존성 설치 | `pnpm install --frozen-lockfile` |
-| 검사 및 빌드 | `pnpm build` |
+| 검사 및 빌드 | `pnpm test` (타입 검사·빌드 후 Playwright 실행) |
 | 빌드 결과 | `web/dist` |
 | Node.js | `24` |
 | pnpm | `web/package.json`의 `packageManager` |
@@ -39,6 +39,27 @@ PR 검사에는 전달하지 않습니다. 토큰을 교체할 때는 같은 이
 `web/public/_headers`의 COOP·COEP 응답 헤더는 Rive 오디오 스레드에 필요한
 cross-origin isolation을 제공합니다. Vite 빌드 시 이 파일도 `dist`로 복사됩니다.
 Node 버전은 `web/.node-version`, pnpm 버전은 `web/package.json`에도 명시합니다.
+
+## 로컬 웹 검사
+
+`web` 디렉터리에서 실행합니다. 브라우저 설치는 처음 한 번 필요합니다.
+
+```sh
+rtk proxy pnpm install --frozen-lockfile
+rtk proxy pnpm exec playwright install chromium
+rtk proxy pnpm test
+```
+
+테스트는 `127.0.0.1:4187`의 격리 헤더가 있는 Vite preview와
+`127.0.0.1:4188/janhyang/`의 헤더 없는 정적 호스트를 직접 시작하고 종료합니다.
+이미 사용 중인 포트의 서버를 재사용하거나 종료하지 않습니다.
+헤더 없는 호스트는 GitHub Pages의 프로젝트 경로와 서비스 워커 재로딩을 검증하기 위한 것입니다.
+실패 시 `web/test-results/`에 진단 정보와 Playwright trace가 남습니다.
+
+Rive WASM은 설치된 패키지에서 Vite가 해시 파일명으로 빌드에 포함합니다.
+일반·스레드·호환성 대체 바이너리를 모두 배포하며, 브라우저는 런타임이 선택한 바이너리만 요청합니다.
+외부 CDN이 차단되어도 같은 출처에서 런타임을 불러올 수 있습니다.
+변경 근거와 남은 검증은 [웹 표준 점검 기록](web-standards.md)에 정리했습니다.
 
 ## Rive를 수정했을 때
 

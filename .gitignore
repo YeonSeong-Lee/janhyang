@@ -3,3 +3,5 @@ dist/
 rive/build/
 .DS_Store
 *.log
+web/test-results/
+web/playwright-report/
