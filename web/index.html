@@ -61,7 +61,7 @@
       button { flex-shrink: 0; }
       button[aria-disabled="true"] { cursor: not-allowed; color: #9baac0; }
       #playback[aria-disabled="true"] { cursor: wait; }
-      :where(button, summary, select, a, pre):focus-visible { outline: 2px solid #b9dfff; outline-offset: 3px; }
+      :where(button, summary, select, input, a, pre):focus-visible { outline: 2px solid #b9dfff; outline-offset: 3px; }
       summary:focus-visible { outline-offset: -4px; border-radius: 6px; }
       @media (hover: hover) {
         button:not([aria-disabled="true"]):hover, summary:hover { background: #1b2b40; color: #fff; }
@@ -128,13 +128,13 @@
         <button id="playback" type="button" aria-controls="stage" hidden>재생</button>
         <details>
           <summary>사용 안내</summary>
-          <p id="instructions">빈 수면을 드래그해 현을 만들고, 만든 현을 옆으로 당겼다 놓아보세요. 긴 현은 낮게, 짧은 현은 높게 울립니다. 그리는 손 옆에 어울리는 음과 길이가 희미하게 나타납니다.</p>
+          <p id="instructions">빈 수면을 드래그해 현을 만들고, 만든 현을 옆으로 당겼다 놓아보세요. 긴 현은 낮게, 짧은 현은 높게 울립니다. 그린 길이가 그대로 음높이가 되며 자동으로 조율하지 않습니다. 손 옆에는 실제 주파수와 가장 가까운 음 이름이 표시됩니다.</p>
           <section id="harmony-panel" aria-labelledby="harmony-title">
             <div class="harmony-heading">
-              <h2 id="harmony-title">어울리는 소리로 <span id="harmony-chord">Am</span></h2>
+              <h2 id="harmony-title">화음 참고하기 <span id="harmony-chord">Am</span></h2>
             </div>
             <div class="harmony-tuning">
-              <label for="harmony-mood">소리 분위기</label>
+              <label for="harmony-mood">참고할 화음</label>
               <select id="harmony-mood" aria-describedby="harmony-description" autocomplete="off">
                 <option value="0">차분하게</option>
                 <option value="1">맑게</option>
@@ -144,14 +144,17 @@
               <span id="harmony-note" aria-label="현재 음">—</span>
             </div>
             <p id="harmony-description">라·도·미가 차분하게 어울려요.</p>
+            <label class="harmony-guide-option" for="harmony-guide">
+              <input id="harmony-guide" type="checkbox" checked /> 화음 길이 안내 표시
+            </label>
             <div class="harmony-actions">
               <button id="harmony-seed" type="button" aria-disabled="true">어울리는 현 3개 놓기</button>
               <button id="harmony-pluck" type="button" aria-disabled="true" hidden>이 현 들어보기</button>
               <button id="harmony-demo" type="button" aria-disabled="true" aria-pressed="false">짧은 연주 듣기</button>
             </div>
-            <p id="harmony-feedback" aria-live="polite" aria-atomic="true">자유롭게 그려도 어울리는 음으로 맞춰져요.</p>
+            <p id="harmony-feedback" aria-live="polite" aria-atomic="true">그린 길이가 곧 음높이예요. 자동으로 조율하지 않아요.</p>
           </section>
-          <p>분위기를 바꾸면 기존 현도 함께 조율됩니다. ‘짧은 연주 듣기’는 지금 만든 현으로 약 5초간 연주합니다. 수면을 누르거나 Esc를 누르면 멈춥니다.</p>
+          <p>반투명 끝선은 화음의 참고 길이이며, 맞추지 않아도 됩니다. 참고할 화음을 바꿔도 만든 현의 소리는 바뀌지 않습니다. ‘어울리는 현 3개 놓기’를 누를 때만 선택한 화음으로 예시 현을 만듭니다. ‘짧은 연주 듣기’는 지금 만든 현으로 약 5초간 연주합니다. 수면을 누르거나 Esc를 누르면 멈춥니다.</p>
           <p>일시정지를 누르면 움직임과 소리가 멈춥니다. 움직임 줄이기 설정에서는 재생을 눌러 시작하세요. 키보드나 클릭으로 연주하려면 아래 버튼을 사용하세요.</p>
           <fieldset id="instrument-controls" aria-describedby="instrument-hint" hidden>
             <legend>버튼으로 연주</legend>

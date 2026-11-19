@@ -5,7 +5,6 @@ import { Paint, PaintStyle, StrokeCap, StrokeJoin } from "rive/paint";
 import { Path } from "rive/path";
 import { Renderer } from "rive/renderer";
 import { Vector } from "rive/vector";
-import { naturalMidi, tunedPitch, chordMidi, frequencyOf } from "./harmony";
 
 /// The most strings kept; drawing one more lets the oldest go.
 export const MAX_KEPT: i32 = 12;
@@ -61,9 +60,9 @@ export const RELEASED_STRING: i32 = 2;
 export const RELEASED_TAP: i32 = 3;
 
 /// The pitch in Hz a string of `length` sounds, in a scene `height` tall.
-/// Doubling its length lowers it by an octave, within a comfortable range.
-export function pitchOf(length: f64, height: f64, harmony: i32 = 0): f64 {
-    return tunedPitch(naturalMidi(length, height), harmony);
+/// Doubling its length lowers it by an octave. No note or chord snapping.
+export function pitchOf(length: f64, height: f64): f64 {
+    return 220 * Math.max(height, 1) / Math.max(length, 1);
 }
 
 /// A string: a line of points held at both ends, each pulled toward its
@@ -79,9 +78,6 @@ export class StringLine {
     length: f64 = 1;
     /// Pitch in Hz it sounds.
     frequency: f64 = 220;
-    // Keep the original pitch intent across resizes and repeated retunings.
-    sourceMidi: f64 = 57;
-    chordDegree: i32 = -1;
     /// Swings a second it is seen to make, far slower than it sounds.
     rate: f64 = 8;
 
@@ -129,7 +125,7 @@ export class StringLine {
 
     path: Path = new Path();
 
-    constructor(ax: f64, ay: f64, bx: f64, by: f64, height: f64, harmony: i32 = 0) {
+    constructor(ax: f64, ay: f64, bx: f64, by: f64, height: f64) {
         this.ax = ax;
         this.ay = ay;
         this.bx = bx;
@@ -137,9 +133,12 @@ export class StringLine {
         let dx = bx - ax;
         let dy = by - ay;
         this.length = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-        this.sourceMidi = naturalMidi(this.length, height);
-        this.frequency = tunedPitch(this.sourceMidi, harmony);
-        this.rate = 5 + 2.4 * Math.log2(this.frequency / 65);
+        // Store the pitch once: resizing or changing a reference chord must
+        // never change an instrument the player has already made.
+        this.frequency = pitchOf(this.length, height);
+        // Keep the deliberately slowed visual simulation stable even for
+        // very low notes; the audible frequency above stays untouched.
+        this.rate = Math.max(2, 5 + 2.4 * Math.log2(this.frequency / 65));
         // A wave crosses the string and back once per swing. Pick whole
         // steps per STRING_STEP, then the piece count that makes the wave run
         // just under COURANT pieces a step.
@@ -305,25 +304,13 @@ export class Struck {
 export class Strings {
     lines: Array<StringLine> = [];
     height: f64 = 1;
-    harmony: i32 = 0;
-
-    tune(harmony: i32): void {
-        this.harmony = harmony;
-        for (let i = 0; i < this.lines.length; i++) {
-            let line = this.lines[i];
-            if (line.leaving) continue;
-            line.frequency = line.chordDegree >= 0
-                ? frequencyOf(chordMidi(harmony, line.chordDegree))
-                : tunedPitch(line.sourceMidi, harmony);
-        }
-    }
 
     get previewFrequency(): f64 {
         if (!this.drawing) return 0;
         let dx = this.endX - this.startX;
         let dy = this.endY - this.startY;
         let length = Math.sqrt(dx * dx + dy * dy);
-        return length >= SHORTEST ? pitchOf(length, this.height, this.harmony) : 0;
+        return length >= SHORTEST ? pitchOf(length, this.height) : 0;
     }
 
     // A line being drawn.
@@ -534,7 +521,7 @@ export class Strings {
                 kept--;
             }
         }
-        let line = new StringLine(ax, ay, bx, by, this.height, this.harmony);
+        let line = new StringLine(ax, ay, bx, by, this.height);
         this.lines.push(line);
         return line;
     }

@@ -1,6 +1,6 @@
 import { prepareIsolation } from "./isolation";
 import type { GestureState, InstrumentState, Player } from "./player";
-import { harmonies, midiOf, noteName } from "./harmony";
+import { harmonies, midiOf, noteName, centsFromNote, pitchLabel } from "./harmony";
 import { createDragGuide } from "./drag-guide";
 import "./harmony.css";
 
@@ -20,6 +20,7 @@ const previousString = document.querySelector<HTMLButtonElement>("#previous-stri
 const nextString = document.querySelector<HTMLButtonElement>("#next-string")!;
 const pluckString = document.querySelector<HTMLButtonElement>("#pluck-string")!;
 const harmonyMood = document.querySelector<HTMLSelectElement>("#harmony-mood")!;
+const harmonyGuide = document.querySelector<HTMLInputElement>("#harmony-guide")!;
 const harmonyChord = document.querySelector<HTMLElement>("#harmony-chord")!;
 const harmonyNotes = document.querySelector<HTMLElement>("#harmony-notes")!;
 const harmonyNote = document.querySelector<HTMLElement>("#harmony-note")!;
@@ -45,7 +46,8 @@ let disposed = false;
 let instrument: InstrumentState = { count: 0, selected: 0, frequency: 0, notesPlayed: 0, demoPlaying: false };
 let gesture: GestureState = { cursor: "crosshair", drawing: false, previewFrequency: 0 };
 let harmonyIndex = 0;
-const dragGuide = createDragGuide(canvas, () => canPlayInstrument() && !help.open);
+const dragGuide = createDragGuide(canvas, () => canPlayInstrument() && !help.open,
+  () => harmonyGuide.checked ? harmonyIndex : null);
 
 function updateHarmony(): void {
   const ready = canPlayInstrument();
@@ -61,17 +63,17 @@ function updateHarmony(): void {
   const frequency = gesture.drawing ? gesture.previewFrequency : instrument.frequency;
   const name = noteName(frequency);
   harmonyNote.textContent = name;
-  harmonyNote.setAttribute("aria-label", `${gesture.drawing ? "만들고 있는" : "선택한"} 현의 음 ${name}`);
-  const pitchClass = frequency > 0 ? ((midiOf(frequency) % 12) + 12) % 12 : -1;
+  harmonyNote.setAttribute("aria-label", `${gesture.drawing ? "만들고 있는" : "선택한"} 현의 음 ${pitchLabel(frequency)}`);
+  const pitchClass = frequency > 0 && Math.abs(centsFromNote(frequency)) < 1 ? ((midiOf(frequency) % 12) + 12) % 12 : -1;
   for (const tone of harmonyNotes.children) {
     (tone as HTMLElement).dataset.active = String(Number((tone as HTMLElement).dataset.pitch) === pitchClass);
   }
   const message = failed ? "다시 불러온 뒤 소리를 만들 수 있어요."
     : loading ? "수면과 소리를 준비하고 있어요."
     : !ready ? "재생을 누르면 시작할 수 있어요."
-    : gesture.drawing ? frequency > 0 ? `${name}에 맞춰졌어요. 손을 놓으면 현이 완성돼요.` : "조금 더 길게 그어보세요."
+    : gesture.drawing ? frequency > 0 ? `${pitchLabel(frequency)}. 그린 길이 그대로 울려요.` : "조금 더 길게 그어보세요."
     : demo ? "지금 만든 현으로 연주 중이에요. 직접 만지면 멈춰요."
-    : instrument.count === 0 ? "자유롭게 그려도 어울리는 음으로 맞춰져요."
+    : instrument.count === 0 ? "그린 길이가 곧 음높이예요. 자동으로 조율하지 않아요."
     : instrument.count < 3 ? "길이를 달리해 현을 더 그어보세요. 긴 현은 낮게 울려요."
     : "현을 당겼다 놓아 나만의 순서로 연주해 보세요.";
   if (harmonyFeedback.textContent !== message) harmonyFeedback.textContent = message;
@@ -130,7 +132,7 @@ function updateInstrument(state: InstrumentState): void {
   const seeded = instrument.count === 0 && state.count > 0 && document.activeElement === harmonySeed;
   instrument = state;
   const description = state.count === 0 ? "아직 현이 없습니다. 현 만들기를 눌러 시작하세요."
-    : `전체 ${numbers.format(state.count)}개 중 ${numbers.format(state.selected)}번째 현 · ${noteName(state.frequency)} · ${numbers.format(state.frequency)}\u00a0Hz`;
+    : `전체 ${numbers.format(state.count)}개 중 ${numbers.format(state.selected)}번째 현 · ${pitchLabel(state.frequency)}`;
   const message = played ? `선택한 현을 튕겼습니다. ${description}` : description;
   if (selection.textContent !== message) selection.textContent = message;
   updateInstrumentControls();

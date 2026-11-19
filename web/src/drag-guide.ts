@@ -1,9 +1,9 @@
-import { noteName } from "./harmony";
+import { noteName, pitchLabel, referenceFrequency } from "./harmony";
 import type { GestureState } from "./player";
 import "./drag-guide.css";
 
 /** A visual companion to Rive's gesture, never a second pitch or input engine. */
-export function createDragGuide(canvas: HTMLCanvasElement, enabled: () => boolean) {
+export function createDragGuide(canvas: HTMLCanvasElement, enabled: () => boolean, referenceHarmony: () => number | null) {
   const root = document.querySelector<HTMLElement>("#drag-guide")!;
   const caption = document.querySelector<HTMLElement>("#drag-caption")!;
   const note = document.querySelector<HTMLElement>("#drag-note")!;
@@ -34,20 +34,23 @@ export function createDragGuide(canvas: HTMLCanvasElement, enabled: () => boolea
     if (!visible) return;
 
     const frequency = gesture.previewFrequency;
-    note.textContent = !holding && frequency > 0 ? noteName(frequency) : "";
+    const harmony = referenceHarmony();
+    const reference = harmony === null ? 0 : referenceFrequency(frequency, harmony);
+    note.textContent = !holding && frequency > 0 ? pitchLabel(frequency) : "";
     hint.textContent = holding ? "당겼다가 놓아보세요"
-      : frequency > 0 ? "놓으면 이 음으로 울려요" : "조금 더 길게 그어보세요";
+      : frequency > 0 ? reference > 0 ? `참고 ${noteName(reference)} · 길이는 자유롭게` : "길이 그대로 울려요"
+      : "조금 더 길게 그어보세요";
 
     const bounds = canvas.getBoundingClientRect();
-    // Rive uses A3 (220 Hz) for a string one viewport high. Derive the
-    // visual target from its actual tuned frequency, without re-snapping it.
-    const targetLength = frequency > 0 ? bounds.height * 220 / frequency : 40;
+    // Rive's actual pitch follows length continuously. The chord reference
+    // marks a suggested length; it neither moves the endpoint nor tunes it.
+    const targetLength = reference > 0 ? bounds.height * 220 / reference : 40;
     const targetX = startX + (x - startX) / Math.max(length, 1) * targetLength;
     const targetY = startY + (y - startY) / Math.max(length, 1) * targetLength;
-    const targetVisible = !holding && targetX >= bounds.left + 10 && targetX <= bounds.right - 10
+    const targetVisible = harmony !== null && !holding && targetX >= bounds.left + 10 && targetX <= bounds.right - 10
       && targetY >= bounds.top + 10 && targetY <= bounds.bottom - 10;
     root.dataset.target = String(targetVisible);
-    root.dataset.aligned = String(frequency > 0 && Math.abs(targetLength - length) < 12);
+    root.dataset.aligned = String(reference > 0 && Math.abs(1200 * Math.log2(frequency / reference)) < 5);
     if (targetVisible) {
       line.setAttribute("x1", String(x));
       line.setAttribute("y1", String(y));

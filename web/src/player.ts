@@ -195,7 +195,7 @@ export async function createPlayer(
       note("pause");
     },
     stopGesture() { cancel(); },
-    setHarmony(id) { cancel(); harmony.value = id === 1 || id === 2 ? id : 0; },
+    setHarmony(id) { harmony.value = id === 1 || id === 2 ? id : 0; },
     harmonyStrings() { seed.trigger(); },
     playPhrase() { phrase.trigger(); },
     createString(length) {

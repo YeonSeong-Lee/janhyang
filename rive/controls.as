@@ -33,7 +33,7 @@ export class Controls {
         return line;
     }
 
-    seed(strings: Strings, width: f64, height: f64): void {
+    seed(strings: Strings, width: f64, height: f64, harmony: i32 = 0): void {
         if (this.kept(strings).length > 0) return;
         // Leave the bottom of even a small phone free for the harmony panel.
         let landscape = width >= 600 && height <= 500;
@@ -41,12 +41,12 @@ export class Controls {
         let bottom = landscape ? height - 76 : Math.max(184, Math.min(height * 0.48, height - 340));
         let longest = Math.max(40, Math.min(areaWidth - 48, height * 0.68));
         for (let degree = 0; degree < 3; degree++) {
-            let midi = chordMidi(strings.harmony, degree);
-            let length = longest * Math.pow(2, <f64>(chordMidi(strings.harmony, 0) - midi) / 12);
+            let midi = chordMidi(harmony, degree);
+            let length = longest * Math.pow(2, <f64>(chordMidi(harmony, 0) - midi) / 12);
             let x = (areaWidth - length) / 2;
             let y = 84 + (bottom - 84) * <f64>degree / 2;
             let line = strings.add(x, y, x + length, y);
-            line.chordDegree = degree;
+            // Only this explicitly requested preset assigns chord pitches.
             line.frequency = frequencyOf(midi);
             this.selected = line;
         }

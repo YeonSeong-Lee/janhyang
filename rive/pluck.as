@@ -22,9 +22,9 @@ const VOICES: i32 = 12;
 // lowest note at the highest output rate a device is likely to run at.
 const LINE: i32 = 4096;
 const LINE_MASK: i32 = LINE - 1;
-const LOWEST: f32 = 55;
-const HIGHEST: f32 = 2000;
-// Seconds a note takes to fade to a thousandth at the lowest pitch.
+// Reference for decay only, not a lower pitch limit.
+const DECAY_REFERENCE: f32 = 55;
+// Seconds a note takes to fade to a thousandth at the reference pitch.
 const SUSTAIN: f32 = 5;
 
 export class Pluck extends AudioProcessor<Inputs> {
@@ -62,12 +62,16 @@ export class Pluck extends AudioProcessor<Inputs> {
     // Starts `note` on the voice that has waited longest.
     private strike(note: Note): void {
         let frequency = note.frequency;
+        // Bound only what this delay line can represent at the output sample
+        // rate. Arbitrary pitches, including those above 2 kHz, stay intact.
+        let lowest = this.rate / <f32>(LINE - 1.5);
+        let highest = this.rate / 2.5;
         // A comparison, not min and max, so a NaN cannot reach the cast below.
-        if (!(frequency >= LOWEST)) {
-            frequency = LOWEST;
+        if (!(frequency >= lowest)) {
+            frequency = lowest;
         }
-        if (frequency > HIGHEST) {
-            frequency = HIGHEST;
+        if (frequency > highest) {
+            frequency = highest;
         }
         let gain = note.gain;
         if (!(gain >= 0)) {
@@ -90,7 +94,7 @@ export class Pluck extends AudioProcessor<Inputs> {
         }
         this.delays[voice] = delay;
         // High notes die sooner, as on a real string.
-        let seconds = SUSTAIN * Mathf.sqrt(LOWEST / frequency) + 0.4;
+        let seconds = SUSTAIN * Mathf.sqrt(DECAY_REFERENCE / frequency) + 0.4;
         this.feedbacks[voice] = Mathf.pow(0.001, 1.0 / (frequency * seconds));
         this.lives[voice] = <i32>(this.rate * seconds * 1.2);
         this.lasts[voice] = 0;

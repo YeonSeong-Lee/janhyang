@@ -45,6 +45,7 @@ export class Main extends Layout {
     cursorProperty: PropertyString? = null;
     cancelProperty: PropertyNumber? = null;
     harmonyProperty: PropertyNumber? = null;
+    starterHarmony: i32 = 0;
     previewProperty: PropertyNumber? = null;
     drawingProperty: PropertyNumber? = null;
     cancelSerial: f64 = 0;
@@ -119,11 +120,7 @@ export class Main extends Layout {
             this.cancelGesture();
         }
         let harmony = this.harmonyProperty;
-        if (harmony != null && harmonyId(harmony.value) != this.strings.harmony) {
-            this.beginControl();
-            this.strings.tune(harmonyId(harmony.value));
-            this.publishControls();
-        }
+        if (harmony != null) this.starterHarmony = harmonyId(harmony.value);
     }
 
     private publishPreview(): void {
@@ -259,7 +256,7 @@ export class Main extends Layout {
     @input harmonyStrings(): void {
         this.syncControls();
         this.beginControl();
-        this.controls.seed(this.strings, this.width, this.height);
+        this.controls.seed(this.strings, this.width, this.height, this.starterHarmony);
         this.strings.released = RELEASED_STRING;
         this.guide.released(this.strings);
         this.publishControls();

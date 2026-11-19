@@ -5,7 +5,8 @@ async function ready(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: "일시정지", exact: true })).toBeEnabled();
 }
 
-for (const viewport of [{ width: 1280, height: 800, note: "E4" }, { width: 320, height: 568, note: "E5" }, { width: 740, height: 360, note: "A3" }]) {
+// Native mouse coordinates land on whole CSS pixels (159 to 272 on the phone).
+for (const viewport of [{ width: 1280, height: 800, note: "D4 부근 · 294.4 Hz" }, { width: 320, height: 568, note: "F5 부근 · 682.7 Hz" }, { width: 740, height: 360, note: "B♭3 부근 · 232.5 Hz" }]) {
   test(`guidance follows the drag and leaves the water clear at ${viewport.width} × ${viewport.height}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
     await ready(page);
@@ -63,7 +64,7 @@ test("touch guidance stays above the finger and survives a second finger releasi
   await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 270, y: 300, id: 1 }] });
   const guide = page.locator("#drag-guide");
   await expect(guide).toHaveAttribute("data-visible", "true");
-  await expect(page.locator("#drag-note")).toHaveText("A5");
+  await expect(page.locator("#drag-note")).toHaveText("B♭5 부근 · 928.4 Hz");
   await page.screenshot({ path: testInfo.outputPath("touch.png") });
   const before = await page.locator("#drag-caption").boundingBox();
   expect(before!.y + before!.height).toBeLessThanOrEqual(246);

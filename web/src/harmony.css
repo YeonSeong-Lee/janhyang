@@ -1,4 +1,4 @@
-/* Optional tuning lives inside the help disclosure; the water stays clear. */
+/* Optional references live inside the help disclosure; the water stays clear. */
 #harmony-panel { --water: #b9dfff; margin: 4px 14px 22px; padding: 16px 0 0; border-top: 1px solid #3e526a; }
 .harmony-heading h2 { margin: 0 0 12px; font-size: 16px; font-weight: 500; }
 #harmony-chord { margin-inline-start: 8px; color: var(--water); font-weight: 400; }
@@ -10,6 +10,8 @@
 .harmony-tone[data-active="true"] { color: #ecf7ff; border-color: var(--water); background: #203349; border-radius: 4px 4px 0 0; }
 #harmony-note { text-align: end; color: #e6f3ff; font-size: 20px; font-variant-numeric: tabular-nums; }
 #harmony-description, #harmony-feedback { padding: 0; color: #adbed3; font-size: 12px; line-height: 1.6; margin: 8px 0 0; overflow-wrap: anywhere; }
+.harmony-guide-option { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 4px; font-size: 13px; cursor: pointer; }
+#harmony-guide { width: 18px; height: 18px; margin: 0; accent-color: var(--water); cursor: pointer; }
 .harmony-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .harmony-actions button { flex: 1 1 130px; min-width: 0; padding-inline: 8px; font-size: 14px; border-color: #5c7088; }
 #harmony-demo[aria-pressed="true"] { color: #e6f3ff; background: #203349; border-color: var(--water); }
