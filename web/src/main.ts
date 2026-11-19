@@ -8,6 +8,8 @@ const canvas = document.querySelector<HTMLCanvasElement>("#stage")!;
 const report = document.querySelector<HTMLPreElement>("#report")!;
 const notice = document.querySelector<HTMLDivElement>("#notice")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
+const loadingScreen = document.querySelector<HTMLElement>("#loading-screen")!;
+const loadingCaption = document.querySelector<HTMLParagraphElement>("#loading-caption")!;
 const playback = document.querySelector<HTMLButtonElement>("#playback")!;
 const retry = document.querySelector<HTMLButtonElement>("#retry")!;
 const instrumentControls = document.querySelector<HTMLFieldSetElement>("#instrument-controls")!;
@@ -43,6 +45,8 @@ let paused = motion.matches;
 let loading = false;
 let failed = false;
 let disposed = false;
+let slowLoadingTimer: number | undefined;
+let loadingExitTimer: number | undefined;
 let instrument: InstrumentState = { count: 0, selected: 0, frequency: 0, notesPlayed: 0, demoPlaying: false };
 let gesture: GestureState = { cursor: "crosshair", drawing: false, previewFrequency: 0 };
 let harmonyIndex = 0;
@@ -109,6 +113,32 @@ function announce(message: string, visible = true): void {
   notice.classList.toggle("message", visible && Boolean(message));
 }
 
+function showLoadingScreen(): void {
+  clearTimeout(loadingExitTimer);
+  loadingScreen.hidden = false;
+  loadingScreen.removeAttribute("aria-hidden");
+  loadingScreen.dataset.state = "loading";
+  loadingCaption.textContent = "수면과 소리를 준비하고 있어요";
+  announce("수면을 준비하고 있습니다…", false);
+  slowLoadingTimer = window.setTimeout(() => {
+    loadingCaption.textContent = "준비가 조금 길어지고 있어요";
+    announce("준비가 조금 길어지고 있어요. 연결 상태에 따라 시간이 걸릴 수 있습니다.", false);
+  }, 10000);
+}
+
+function hideLoadingScreen(immediately = false): void {
+  clearTimeout(slowLoadingTimer);
+  clearTimeout(loadingExitTimer);
+  loadingScreen.setAttribute("aria-hidden", "true");
+  if (immediately || motion.matches) {
+    loadingScreen.hidden = true;
+    return;
+  }
+  // Input becomes available immediately; only the visual veil fades away.
+  loadingScreen.dataset.state = "leaving";
+  loadingExitTimer = window.setTimeout(() => { loadingScreen.hidden = true; }, 400);
+}
+
 function canPlayInstrument(): boolean {
   return Boolean(player) && !paused && !loading && !failed;
 }
@@ -158,6 +188,7 @@ function fail(error: unknown): void {
   note(`load error: ${String(error)}`);
   failed = true;
   loading = false;
+  hideLoadingScreen(true);
   retry.hidden = false;
   announce("화면을 불러오지 못했습니다. 연결을 확인한 뒤 다시 불러와 주세요.");
   // Preserve keyboard focus when replacing the playback control with retry.
@@ -173,7 +204,7 @@ const isolation = prepareIsolation(
 async function start(): Promise<void> {
   if (loading || failed || disposed) return;
   loading = true;
-  announce("수면을 준비하고 있습니다…");
+  showLoadingScreen();
   updatePlayback();
   try {
     // Do not initialize WASM in the document the isolation worker will replace.
@@ -188,6 +219,7 @@ async function start(): Promise<void> {
     player = loaded;
     player.setHarmony(harmonyIndex);
     loading = false;
+    hideLoadingScreen();
     if (paused) {
       player.pause();
       announce("움직임을 멈췄습니다. 재생을 누르면 현과 파문이 움직입니다.");
@@ -263,7 +295,7 @@ motion.addEventListener("change", () => {
   if (motion.matches && !failed) {
     paused = true;
     player?.pause();
-    announce("움직임 줄이기 설정에 따라 멈췄습니다. 재생을 누르면 다시 시작합니다.");
+    if (!loading) announce("움직임 줄이기 설정에 따라 멈췄습니다. 재생을 누르면 다시 시작합니다.");
     updatePlayback();
   }
 }, { signal: events.signal });
@@ -273,6 +305,7 @@ window.addEventListener("unhandledrejection", (event) => note(`rejection: ${Stri
 
 function cleanup(): void {
   disposed = true;
+  hideLoadingScreen(true);
   events.abort();
   dragGuide.cleanup();
   player?.cleanup();
@@ -288,6 +321,7 @@ instrumentControls.hidden = false;
 showHarmony();
 updatePlayback();
 if (paused) {
+  hideLoadingScreen(true);
   announce("움직임 줄이기 설정이 켜져 있습니다. 재생을 누르면 현과 파문이 움직입니다.");
 } else {
   void start();

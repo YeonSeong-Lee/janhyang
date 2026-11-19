@@ -13,6 +13,7 @@
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" sizes="any" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" sizes="180x180" />
     <link rel="manifest" href="./site.webmanifest" />
+    <link rel="stylesheet" href="/src/loading.css" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="ko_KR" />
     <meta property="og:site_name" content="잔향" />
@@ -107,6 +108,35 @@
   <body>
     <main>
       <h1 class="visually-hidden">잔향</h1>
+      <section id="loading-screen" aria-labelledby="loading-title" data-state="loading">
+        <div class="loading-content">
+          <div class="loading-artwork">
+            <p class="loading-name">잔향</p>
+            <svg class="loading-water" viewBox="0 0 420 220" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="loading-string-light" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#b9dfff" stop-opacity=".15" />
+                  <stop offset=".5" stop-color="#dcefff" />
+                  <stop offset="1" stop-color="#b9dfff" stop-opacity=".15" />
+                </linearGradient>
+              </defs>
+              <g transform="translate(210 120)">
+                <ellipse class="loading-ripple" rx="110" ry="38" />
+                <ellipse class="loading-ripple loading-ripple-second" rx="110" ry="38" />
+                <ellipse class="loading-ripple loading-ripple-third" rx="110" ry="38" />
+                <path class="loading-string" d="M -148 0 Q 0 -48 148 0" stroke="url(#loading-string-light)" />
+                <circle class="loading-anchor" cx="-148" r="2" />
+                <circle class="loading-anchor" cx="148" r="2" />
+              </g>
+            </svg>
+          </div>
+          <div class="loading-copy">
+            <h2 id="loading-title">당신의 손끝에서,<br />첫 울림이 시작됩니다.</h2>
+            <p class="loading-description">선을 그으면 현이 되고,<br />당겼다 놓으면 소리와 파문이 번져요.</p>
+            <p id="loading-caption" aria-hidden="true">수면과 소리를 준비하고 있어요</p>
+          </div>
+        </div>
+      </section>
       <canvas id="stage" width="1280" height="720" role="img" aria-label="현과 파문으로 연주하는 수면" aria-describedby="instructions">
         수면에 선을 그어 현을 만들고, 당겼다 놓아 소리와 파문을 만드는 작품입니다.
       </canvas>
@@ -184,7 +214,10 @@
         </details>
       </div>
       <pre id="report" role="region" aria-label="진단 정보" tabindex="0" hidden></pre>
-      <noscript><p class="message">잔향은 JavaScript로 소리와 파문을 만듭니다. 브라우저에서 JavaScript를 켜고 다시 열어 주세요.</p></noscript>
+      <noscript>
+        <style>#loading-screen { display: none; }</style>
+        <p class="message">잔향은 JavaScript로 소리와 파문을 만듭니다. 브라우저에서 JavaScript를 켜고 다시 열어 주세요.</p>
+      </noscript>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

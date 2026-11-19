@@ -34,9 +34,15 @@ test("a slow instrument announces loading and completion through the existing li
     await expect(status).toHaveAttribute("role", "status");
     await expect(status).toHaveAttribute("aria-live", "polite");
     await expect(status).toHaveText("수면을 준비하고 있습니다…");
+    await expect(page.getByRole("heading", { name: "당신의 손끝에서, 첫 울림이 시작됩니다." })).toBeVisible();
+    await expect(page.locator("#stage")).toHaveJSProperty("inert", true);
+    await expect(page.locator("#loading-caption")).toHaveText("준비가 조금 길어지고 있어요");
+    await expect(status).toContainText("연결 상태에 따라 시간이 걸릴 수 있습니다");
     finishLoading();
     await expect(page.getByRole("button", { name: "일시정지", exact: true })).toBeEnabled();
     await expect(status).toContainText("수면을 준비했습니다");
+    await expect(page.locator("#loading-screen")).toBeHidden();
+    await expect(page.locator("#stage")).toHaveJSProperty("inert", false);
   } finally {
     finishLoading();
   }

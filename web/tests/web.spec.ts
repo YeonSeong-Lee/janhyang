@@ -28,6 +28,7 @@ test("reduced motion defers the instrument until keyboard activation", async ({ 
   await page.goto("/");
   const play = page.getByRole("button", { name: "재생", exact: true });
   await expect(play).toBeEnabled();
+  await expect(page.locator("#loading-screen")).toBeHidden();
   await expect(page.getByRole("status")).toContainText("움직임 줄이기");
   expect(resources).toEqual([]);
   await page.keyboard.press("Tab");
@@ -98,6 +99,7 @@ test("a failed Rive file exposes an accessible retry action", async ({ page }) =
   await page.route("**/janhyang.riv", (route) => route.abort());
   await page.goto("/");
   await expect(page.getByRole("status")).toContainText("불러오지 못했습니다");
+  await expect(page.locator("#loading-screen")).toBeHidden();
   const retry = page.getByRole("button", { name: "다시 불러오기" });
   await expect(retry).toBeVisible();
   await page.unroute("**/janhyang.riv");
@@ -109,6 +111,7 @@ test("failed WASM downloads reach the error state", async ({ page }) => {
   await page.route("**/*.wasm", (route) => route.abort());
   await page.goto("/");
   await expect(page.getByRole("status")).toContainText("불러오지 못했습니다");
+  await expect(page.locator("#loading-screen")).toBeHidden();
   await expect(page.getByRole("button", { name: "다시 불러오기" })).toBeVisible();
 });
 
@@ -170,6 +173,7 @@ test("JavaScript-disabled visitors get an explanation", async ({ browser }) => {
   await page.goto("http://127.0.0.1:4187");
   await expect(page.locator("noscript p")).toBeVisible();
   await expect(page.locator("noscript p")).toContainText("JavaScript를 켜고");
+  await expect(page.locator("#loading-screen")).toBeHidden();
   await expect(page.getByRole("button", { name: "재생", exact: true })).toBeHidden();
   await context.close();
 });
