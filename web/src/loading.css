@@ -53,7 +53,8 @@
 #loading-title { margin: 0; font-size: clamp(21px, 3vw, 27px); font-weight: 400; line-height: 1.65; letter-spacing: -.025em; }
 .loading-description { margin: 16px 0 0; color: #adbed3; font-size: 14px; line-height: 1.9; }
 #loading-caption { margin: 32px 0 0; color: #8fabc2; font-size: 12px; line-height: 1.8; }
-.loading-copy { word-break: keep-all; overflow-wrap: anywhere; }
+.loading-copy { overflow-wrap: anywhere; }
+.loading-copy:lang(ko) { word-break: keep-all; }
 
 @keyframes loading-pluck {
   0%, 8%, 62%, 100% { transform: scaleY(.04); }

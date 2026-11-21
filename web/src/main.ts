@@ -1,3 +1,4 @@
+import { locale, messages, numbers, setLanguage, translate, translateDocument } from "./i18n";
 import { prepareIsolation } from "./isolation";
 import type { GestureState, InstrumentState } from "./player";
 import { harmonies, midiOf, noteName, centsFromNote, pitchLabel } from "./harmony";
@@ -34,15 +35,13 @@ const harmonySeed = document.querySelector<HTMLButtonElement>("#harmony-seed")!;
 const harmonyPluck = document.querySelector<HTMLButtonElement>("#harmony-pluck")!;
 const harmonyDemo = document.querySelector<HTMLButtonElement>("#harmony-demo")!;
 const help = document.querySelector<HTMLDetailsElement>(".controls details")!;
-const numbers = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 });
+const languagePicker = document.querySelector<HTMLSelectElement>("#language")!;
 const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-const audioNotice = window.crossOriginIsolated
-  ? ""
-  : "이 브라우저 환경에서는 소리를 재생할 수 없어 화면만 표시합니다.";
 const debug = new URLSearchParams(location.search).has("debug");
 const lines: string[] = [];
 const events = new AbortController();
 let instrument: InstrumentState = { count: 0, selected: 0, frequency: 0, notesPlayed: 0, demoPlaying: false };
+let lastPlucked = false;
 let gesture: GestureState = { cursor: "crosshair", drawing: false, previewFrequency: 0 };
 let harmonyIndex = 0;
 const dragGuide = createDragGuide(canvas, () => harmonyGuide.checked ? harmonyIndex : null);
@@ -56,7 +55,7 @@ const pointerSession = createPointerSession(canvas, {
 const isolation = prepareIsolation(new URL(`${import.meta.env.BASE_URL}coi.js`, document.baseURI), note);
 const session = createPlaybackSession({
   reducedMotion: motion.matches,
-  audioNotice,
+  audioUnavailable: !window.crossOriginIsolated,
   load: async (signal) => {
     if (await isolation === "reloading" || signal.aborted) return;
     const { createPlayer } = await import("./player");
@@ -79,35 +78,35 @@ function updateHarmony(): void {
   harmonyDemo.setAttribute("aria-disabled", String(!ready || instrument.count === 0));
   const demo = ready && instrument.demoPlaying;
   harmonyDemo.setAttribute("aria-pressed", String(demo));
-  harmonyDemo.textContent = demo ? "예시 연주 멈추기" : "짧은 연주 듣기";
+  harmonyDemo.textContent = demo ? messages.stopDemo : messages.demo;
   const frequency = gesture.drawing ? gesture.previewFrequency : instrument.frequency;
   const name = noteName(frequency);
   harmonyNote.textContent = name;
-  harmonyNote.setAttribute("aria-label", `${gesture.drawing ? "만들고 있는" : "선택한"} 현의 음 ${pitchLabel(frequency)}`);
+  harmonyNote.setAttribute("aria-label", translate(gesture.drawing ? "drawPitch" : "selectedPitch", { pitch: pitchLabel(frequency) }));
   const pitchClass = frequency > 0 && Math.abs(centsFromNote(frequency)) < 1 ? ((midiOf(frequency) % 12) + 12) % 12 : -1;
   for (const tone of harmonyNotes.children) {
     (tone as HTMLElement).dataset.active = String(Number((tone as HTMLElement).dataset.pitch) === pitchClass);
   }
-  const message = session.state.phase === "failed" ? "다시 불러온 뒤 소리를 만들 수 있어요."
-    : session.state.phase === "loading" ? "수면과 소리를 준비하고 있어요."
-    : !ready ? "재생을 누르면 시작할 수 있어요."
-    : gesture.drawing ? frequency > 0 ? `${pitchLabel(frequency)}. 그린 길이 그대로 울려요.` : "조금 더 길게 그어보세요."
-    : demo ? "지금 만든 현으로 연주 중이에요. 직접 만지면 멈춰요."
-    : instrument.count === 0 ? "그린 길이가 곧 음높이예요. 자동으로 조율하지 않아요."
-    : instrument.count < 3 ? "길이를 달리해 현을 더 그어보세요. 긴 현은 낮게 울려요."
-    : "현을 당겼다 놓아 나만의 순서로 연주해 보세요.";
+  const message = session.state.phase === "failed" ? messages.afterReload
+    : session.state.phase === "loading" ? messages.preparing
+    : !ready ? messages.pressPlay
+    : gesture.drawing ? frequency > 0 ? translate("drawnPitch", { pitch: pitchLabel(frequency) }) : messages.drawLonger
+    : demo ? messages.demoFeedback
+    : instrument.count === 0 ? messages.drawFeedback
+    : instrument.count < 3 ? messages.moreStrings
+    : messages.playOwn;
   if (harmonyFeedback.textContent !== message) harmonyFeedback.textContent = message;
 }
 
 function showHarmony(): void {
   const harmony = harmonies[harmonyIndex];
   harmonyChord.textContent = harmony.chord;
-  harmonyDescription.textContent = harmony.hint;
-  harmonyNotes.replaceChildren(...harmony.notes.map((pitch, i) => {
+  harmonyDescription.textContent = messages[harmony.hint];
+  harmonyNotes.replaceChildren(...harmony.notes.map((pitch) => {
     const tone = document.createElement("span");
     tone.className = "harmony-tone";
     tone.dataset.pitch = String(pitch);
-    tone.textContent = harmony.syllables[i];
+    tone.textContent = messages.noteNames[pitch];
     return tone;
   }));
   updateHarmony();
@@ -137,22 +136,26 @@ function updateInstrumentControls(): void {
   for (const button of [previousString, nextString, pluckString]) {
     button.setAttribute("aria-disabled", String(!ready || instrument.count === 0));
   }
-  instrumentHint.textContent = session.state.phase === "failed" ? "다시 불러온 뒤 연주할 수 있습니다."
-    : session.state.phase === "loading" ? "수면을 준비하고 있습니다…"
-    : !ready ? "재생을 누른 뒤 현을 만들고 연주할 수 있습니다."
-    : "Tab으로 이동하고 Enter 또는 Space로 버튼을 누르세요. 선택한 현에는 밝은 점이 표시됩니다.";
+  instrumentHint.textContent = session.state.phase === "failed" ? messages.afterReload
+    : session.state.phase === "loading" ? messages.loading
+    : !ready ? messages.pressPlay : messages.keyboard;
   if (!ready) pointerSession.cancel();
   updateHarmony();
 }
 
+function renderSelection(): void {
+  const description = instrument.count === 0 ? messages.empty : translate("selection", {
+    count: numbers.format(instrument.count), selected: numbers.format(instrument.selected), pitch: pitchLabel(instrument.frequency),
+  });
+  const message = lastPlucked ? translate("played", { selection: description }) : description;
+  if (selection.textContent !== message) selection.textContent = message;
+}
+
 function updateInstrument(state: InstrumentState): void {
-  const played = state.notesPlayed > instrument.notesPlayed;
+  lastPlucked = state.notesPlayed > instrument.notesPlayed;
   const seeded = instrument.count === 0 && state.count > 0 && document.activeElement === harmonySeed;
   instrument = state;
-  const description = state.count === 0 ? "아직 현이 없습니다. 현 만들기를 눌러 시작하세요."
-    : `전체 ${numbers.format(state.count)}개 중 ${numbers.format(state.selected)}번째 현 · ${pitchLabel(state.frequency)}`;
-  const message = played ? `선택한 현을 튕겼습니다. ${description}` : description;
-  if (selection.textContent !== message) selection.textContent = message;
+  renderSelection();
   updateInstrumentControls();
   if (seeded) harmonyDemo.focus();
 }
@@ -163,13 +166,13 @@ function renderPlayback(state: Readonly<PlaybackState>): void {
   loadingScreen.hidden = state.curtain === "hidden";
   loadingScreen.setAttribute("aria-hidden", String(state.curtain !== "visible"));
   loadingScreen.dataset.state = state.curtain === "leaving" ? "leaving" : "loading";
-  loadingCaption.textContent = state.slow ? "준비가 조금 길어지고 있어요" : "수면과 소리를 준비하고 있어요";
-  announce(state.announcement, state.visibleAnnouncement);
+  loadingCaption.textContent = state.slow ? messages.slowCaption : messages.preparing;
+  announce(state.announcement ? messages[state.announcement] : "", state.visibleAnnouncement);
   retry.hidden = !failed;
   if (failed && document.activeElement === playback) retry.focus();
   playback.hidden = failed;
   playback.setAttribute("aria-disabled", String(loading));
-  playback.textContent = loading ? "준비 중…" : state.phase === "playing" ? "일시정지" : "재생";
+  playback.textContent = loading ? messages.busy : state.phase === "playing" ? messages.pause : messages.play;
   canvas.inert = state.phase !== "playing";
   updateInstrumentControls();
 }
@@ -239,6 +242,37 @@ function cleanup(persisted = false): void {
 window.addEventListener("pagehide", (event) => cleanup(event.persisted), { signal: events.signal });
 if (import.meta.hot) import.meta.hot.dispose(() => cleanup());
 
-instrumentControls.hidden = false;
-showHarmony();
-session.start();
+function renderLanguage(): void {
+  languagePicker.value = locale;
+  translateDocument(languagePicker.selectedOptions[0].dir);
+  help.hidden = false;
+  canvas.removeAttribute("lang");
+  renderSelection();
+  showHarmony();
+  pointerSession.observe(gesture);
+}
+
+languagePicker.addEventListener("change", async () => {
+  try {
+    if (!await setLanguage(languagePicker.value) || events.signal.aborted) return;
+  } catch (error) {
+    if (events.signal.aborted) return;
+    languagePicker.value = locale;
+    note(`language load error: ${error}`);
+    announce(messages.languageError);
+    return;
+  }
+  try { localStorage.setItem(languagePicker.name, locale); } catch { /* Use the selection for this visit. */ }
+  renderLanguage();
+  renderPlayback(session.state);
+}, { signal: events.signal });
+
+async function start(): Promise<void> {
+  await setLanguage(document.documentElement.lang).catch(error => note(`language load error: ${error}`));
+  if (events.signal.aborted) return;
+  languagePicker.closest("label")!.hidden = false;
+  instrumentControls.hidden = false;
+  renderLanguage();
+  session.start();
+}
+void start();

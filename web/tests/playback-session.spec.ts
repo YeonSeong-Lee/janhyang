@@ -27,7 +27,7 @@ async function setup(page: Page, reducedMotion = false): Promise<void> {
     const { createPlaybackSession } = await import(url) as typeof import("../src/playback-session");
     URL.revokeObjectURL(url);
     const session = createPlaybackSession({
-      reducedMotion, audioNotice: "",
+      reducedMotion, audioUnavailable: false,
       load: (signal) => {
         const h = window.playbackHarness;
         h.loads++;

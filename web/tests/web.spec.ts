@@ -79,6 +79,7 @@ test("resizes the drawing surface on a high-density narrow viewport", async ({ b
   const context = await browser.newContext({
     viewport: { width: 320, height: 568 },
     deviceScaleFactor: 2,
+    locale: "ko-KR",
   });
   const page = await context.newPage();
   await page.goto("http://127.0.0.1:4187/");
@@ -173,6 +174,8 @@ test("JavaScript-disabled visitors get an explanation", async ({ browser }) => {
   await page.goto("http://127.0.0.1:4187");
   await expect(page.locator("noscript p")).toBeVisible();
   await expect(page.locator("noscript p")).toContainText("JavaScript를 켜고");
+  await page.locator("noscript summary").click();
+  await expect(page.locator('noscript li[lang="es"]')).toContainText("Activa JavaScript en tu navegador");
   await expect(page.locator("#loading-screen")).toBeHidden();
   await expect(page.getByRole("button", { name: "재생", exact: true })).toBeHidden();
   await context.close();

@@ -1,3 +1,4 @@
+import { messages, translate } from "./i18n";
 import { noteName, pitchLabel, referenceFrequency } from "./harmony";
 import type { GestureState } from "./player";
 import type { PointerPosition } from "./pointer-session";
@@ -28,9 +29,9 @@ export function createDragGuide(canvas: HTMLCanvasElement, referenceHarmony: () 
     const harmony = referenceHarmony();
     const reference = harmony === null ? 0 : referenceFrequency(frequency, harmony);
     note.textContent = !holding && frequency > 0 ? pitchLabel(frequency) : "";
-    hint.textContent = holding ? "당겼다가 놓아보세요"
-      : frequency > 0 ? reference > 0 ? `참고 ${noteName(reference)} · 길이는 자유롭게` : "길이 그대로 울려요"
-      : "조금 더 길게 그어보세요";
+    hint.textContent = holding ? messages.hold
+      : frequency > 0 ? reference > 0 ? translate("guideRef", { note: noteName(reference) }) : messages.sameLength
+      : messages.drawLonger;
 
     const bounds = canvas.getBoundingClientRect();
     // Rive's actual pitch follows length continuously. The chord reference

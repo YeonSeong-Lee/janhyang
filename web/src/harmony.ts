@@ -1,7 +1,9 @@
+import { frequencies, translate } from "./i18n";
+
 export const harmonies = [
-  { name: "차분하게", chord: "Am", notes: [9, 0, 4], syllables: ["라", "도", "미"], hint: "라·도·미가 차분하게 어울려요." },
-  { name: "맑게", chord: "C", notes: [0, 4, 7], syllables: ["도", "미", "솔"], hint: "도·미·솔이 맑게 어울려요." },
-  { name: "따뜻하게", chord: "F", notes: [5, 9, 0], syllables: ["파", "라", "도"], hint: "파·라·도가 따뜻하게 어울려요." },
+  { chord: "Am", notes: [9, 0, 4], hint: "calmHint" },
+  { chord: "C", notes: [0, 4, 7], hint: "clearHint" },
+  { chord: "F", notes: [5, 9, 0], hint: "warmHint" },
 ] as const;
 
 const names = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
@@ -21,7 +23,7 @@ export function centsFromNote(frequency: number): number {
 }
 
 export function pitchLabel(frequency: number): string {
-  return frequency > 0 ? `${noteName(frequency)} 부근 · ${frequency.toFixed(1)} Hz` : "—";
+  return frequency > 0 ? translate("pitch", { note: noteName(frequency), hz: frequencies.format(frequency) }) : "—";
 }
 
 /** An optional visual reference only. Never passed back to the sound engine. */

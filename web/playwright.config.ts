@@ -8,6 +8,7 @@ export default defineConfig({
   expect: { timeout: 15000 },
   use: {
     baseURL: "http://127.0.0.1:4187",
+    locale: "ko-KR",
     browserName: "chromium",
     trace: "retain-on-failure",
   },
