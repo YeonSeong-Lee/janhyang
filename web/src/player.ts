@@ -114,8 +114,6 @@ export async function createPlayer(
   emitState();
 
   let playing = false;
-  let owner: number | undefined;
-  const events = new AbortController();
   const emitGesture = () => {
     const value = playing ? cursor.value : "default";
     canvas.style.cursor = ["grab", "grabbing", "crosshair"].includes(value) ? value : "default";
@@ -124,30 +122,11 @@ export async function createPlayer(
   };
   const cancel = () => {
     cancelGesture.value++;
-    owner = undefined;
     canvas.style.cursor = playing ? "crosshair" : "default";
   };
   cursor.on(emitGesture);
   previewFrequency.on(emitGesture);
   drawing.on(emitGesture);
-  window.addEventListener("blur", cancel, { signal: events.signal });
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) cancel();
-  }, { signal: events.signal });
-  const cancelPointer = (event: PointerEvent) => {
-    if (event.pointerId === owner) cancel();
-  };
-  canvas.addEventListener("pointercancel", cancelPointer, { signal: events.signal });
-  canvas.addEventListener("lostpointercapture", cancelPointer, { signal: events.signal });
-  // A secondary finger releasing capture must not cancel the held string.
-  canvas.addEventListener("pointerdown", (event) => {
-    if (!playing || owner !== undefined) return;
-    owner = event.pointerId;
-  }, { signal: events.signal });
-  window.addEventListener("pointerup", (event) => {
-    if (event.pointerId === owner) owner = undefined;
-  }, { signal: events.signal });
-
   let resizeFrame = 0;
   let resolution: MediaQueryList;
 
@@ -210,7 +189,6 @@ export async function createPlayer(
       pluck.trigger();
     },
     cleanup() {
-      events.abort();
       cursor.off(emitGesture);
       previewFrequency.off(emitGesture);
       drawing.off(emitGesture);

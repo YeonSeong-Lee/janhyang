@@ -1,7 +1,7 @@
 import { Tests } from "rive/test";
 import { Controls } from "./controls";
-import { Guide } from "./guide";
-import { Strings, RELEASED_STRING, RELEASED_PLUCK, STRING_STEP } from "./strings";
+import { Performance } from "./performance";
+import { Strings, STRING_STEP } from "./strings";
 
 export class ControlsTests extends Tests {
     override run(): void {
@@ -56,26 +56,18 @@ export class ControlsTests extends Tests {
         });
 
         test("a button pluck takes ownership from a running demonstration", (expect) => {
-            let strings = new Strings();
-            strings.height = 720;
-            let controls = new Controls();
-            let guide = new Guide();
-            guide.resize(1280, 720);
-            guide.controlStarted(strings);
-            let line = controls.create(strings, 1280, 720, 0.5);
-            strings.released = RELEASED_STRING;
-            guide.released(strings);
+            let performance = new Performance();
+            performance.resize(1280, 720);
+            performance.createString(0.5);
+            let line = performance.strings.lines[0];
             for (let i = 0; i < 250; i++) {
-                guide.advance(1.0 / 60, strings);
-                strings.step();
+                performance.advance(1.0 / 60);
+                performance.strings.step();
             }
             expect.that(line.heldPoint).greaterThanOrEqual(0);
-            guide.controlStarted(strings);
-            controls.pluck(strings, 0.5);
-            strings.released = RELEASED_PLUCK;
-            guide.released(strings);
-            guide.advance(STRING_STEP, strings);
-            expect.that(guide.rung).is(true);
+            performance.pluckString(0.5);
+            performance.advance(STRING_STEP);
+            expect.that(performance.guide.rung).is(true);
             expect.that(line.heldPoint).is(-1);
             expect.that(line.fingerTarget).greaterThan(0);
         });

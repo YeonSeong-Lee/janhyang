@@ -1,7 +1,9 @@
 import { prepareIsolation } from "./isolation";
-import type { GestureState, InstrumentState, Player } from "./player";
+import type { GestureState, InstrumentState } from "./player";
 import { harmonies, midiOf, noteName, centsFromNote, pitchLabel } from "./harmony";
 import { createDragGuide } from "./drag-guide";
+import { createPointerSession } from "./pointer-session";
+import { createPlaybackSession, type PlaybackState } from "./playback-session";
 import "./harmony.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#stage")!;
@@ -40,18 +42,32 @@ const audioNotice = window.crossOriginIsolated
 const debug = new URLSearchParams(location.search).has("debug");
 const lines: string[] = [];
 const events = new AbortController();
-let player: Player | undefined;
-let paused = motion.matches;
-let loading = false;
-let failed = false;
-let disposed = false;
-let slowLoadingTimer: number | undefined;
-let loadingExitTimer: number | undefined;
 let instrument: InstrumentState = { count: 0, selected: 0, frequency: 0, notesPlayed: 0, demoPlaying: false };
 let gesture: GestureState = { cursor: "crosshair", drawing: false, previewFrequency: 0 };
 let harmonyIndex = 0;
-const dragGuide = createDragGuide(canvas, () => canPlayInstrument() && !help.open,
-  () => harmonyGuide.checked ? harmonyIndex : null);
+const dragGuide = createDragGuide(canvas, () => harmonyGuide.checked ? harmonyIndex : null);
+const pointerSession = createPointerSession(canvas, {
+  enabled: canPlayInstrument,
+  guideEnabled: () => !help.open,
+  show: dragGuide.render,
+  stop: () => session.player?.stopGesture(),
+});
+
+const isolation = prepareIsolation(new URL(`${import.meta.env.BASE_URL}coi.js`, document.baseURI), note);
+const session = createPlaybackSession({
+  reducedMotion: motion.matches,
+  audioNotice,
+  load: async (signal) => {
+    if (await isolation === "reloading" || signal.aborted) return;
+    const { createPlayer } = await import("./player");
+    if (signal.aborted) return;
+    const player = await createPlayer(canvas, note, updateInstrument, updateGesture);
+    player.setHarmony(harmonyIndex);
+    return player;
+  },
+  changed: renderPlayback,
+  failed: (error) => note(`load error: ${String(error)}`),
+});
 
 function updateHarmony(): void {
   const ready = canPlayInstrument();
@@ -72,8 +88,8 @@ function updateHarmony(): void {
   for (const tone of harmonyNotes.children) {
     (tone as HTMLElement).dataset.active = String(Number((tone as HTMLElement).dataset.pitch) === pitchClass);
   }
-  const message = failed ? "다시 불러온 뒤 소리를 만들 수 있어요."
-    : loading ? "수면과 소리를 준비하고 있어요."
+  const message = session.state.phase === "failed" ? "다시 불러온 뒤 소리를 만들 수 있어요."
+    : session.state.phase === "loading" ? "수면과 소리를 준비하고 있어요."
     : !ready ? "재생을 누르면 시작할 수 있어요."
     : gesture.drawing ? frequency > 0 ? `${pitchLabel(frequency)}. 그린 길이 그대로 울려요.` : "조금 더 길게 그어보세요."
     : demo ? "지금 만든 현으로 연주 중이에요. 직접 만지면 멈춰요."
@@ -113,35 +129,7 @@ function announce(message: string, visible = true): void {
   notice.classList.toggle("message", visible && Boolean(message));
 }
 
-function showLoadingScreen(): void {
-  clearTimeout(loadingExitTimer);
-  loadingScreen.hidden = false;
-  loadingScreen.removeAttribute("aria-hidden");
-  loadingScreen.dataset.state = "loading";
-  loadingCaption.textContent = "수면과 소리를 준비하고 있어요";
-  announce("수면을 준비하고 있습니다…", false);
-  slowLoadingTimer = window.setTimeout(() => {
-    loadingCaption.textContent = "준비가 조금 길어지고 있어요";
-    announce("준비가 조금 길어지고 있어요. 연결 상태에 따라 시간이 걸릴 수 있습니다.", false);
-  }, 10000);
-}
-
-function hideLoadingScreen(immediately = false): void {
-  clearTimeout(slowLoadingTimer);
-  clearTimeout(loadingExitTimer);
-  loadingScreen.setAttribute("aria-hidden", "true");
-  if (immediately || motion.matches) {
-    loadingScreen.hidden = true;
-    return;
-  }
-  // Input becomes available immediately; only the visual veil fades away.
-  loadingScreen.dataset.state = "leaving";
-  loadingExitTimer = window.setTimeout(() => { loadingScreen.hidden = true; }, 400);
-}
-
-function canPlayInstrument(): boolean {
-  return Boolean(player) && !paused && !loading && !failed;
-}
+function canPlayInstrument(): boolean { return session.canPlay; }
 
 function updateInstrumentControls(): void {
   const ready = canPlayInstrument();
@@ -149,11 +137,11 @@ function updateInstrumentControls(): void {
   for (const button of [previousString, nextString, pluckString]) {
     button.setAttribute("aria-disabled", String(!ready || instrument.count === 0));
   }
-  instrumentHint.textContent = failed ? "다시 불러온 뒤 연주할 수 있습니다."
-    : loading ? "수면을 준비하고 있습니다…"
+  instrumentHint.textContent = session.state.phase === "failed" ? "다시 불러온 뒤 연주할 수 있습니다."
+    : session.state.phase === "loading" ? "수면을 준비하고 있습니다…"
     : !ready ? "재생을 누른 뒤 현을 만들고 연주할 수 있습니다."
     : "Tab으로 이동하고 Enter 또는 Space로 버튼을 누르세요. 선택한 현에는 밝은 점이 표시됩니다.";
-  if (!ready || help.open) dragGuide.cancel();
+  if (!ready) pointerSession.cancel();
   updateHarmony();
 }
 
@@ -169,160 +157,88 @@ function updateInstrument(state: InstrumentState): void {
   if (seeded) harmonyDemo.focus();
 }
 
-function updatePlayback(): void {
+function renderPlayback(state: Readonly<PlaybackState>): void {
+  const loading = state.phase === "loading";
+  const failed = state.phase === "failed";
+  loadingScreen.hidden = state.curtain === "hidden";
+  loadingScreen.setAttribute("aria-hidden", String(state.curtain !== "visible"));
+  loadingScreen.dataset.state = state.curtain === "leaving" ? "leaving" : "loading";
+  loadingCaption.textContent = state.slow ? "준비가 조금 길어지고 있어요" : "수면과 소리를 준비하고 있어요";
+  announce(state.announcement, state.visibleAnnouncement);
+  retry.hidden = !failed;
+  if (failed && document.activeElement === playback) retry.focus();
   playback.hidden = failed;
   playback.setAttribute("aria-disabled", String(loading));
-  playback.textContent = loading ? "준비 중…" : paused ? "재생" : "일시정지";
-  canvas.inert = paused || loading || failed;
+  playback.textContent = loading ? "준비 중…" : state.phase === "playing" ? "일시정지" : "재생";
+  canvas.inert = state.phase !== "playing";
   updateInstrumentControls();
 }
 
 function updateGesture(state: GestureState): void {
   gesture = state;
-  dragGuide.update(state);
+  pointerSession.observe(state);
   updateHarmony();
 }
 
-function fail(error: unknown): void {
-  if (disposed) return;
-  note(`load error: ${String(error)}`);
-  failed = true;
-  loading = false;
-  hideLoadingScreen(true);
-  retry.hidden = false;
-  announce("화면을 불러오지 못했습니다. 연결을 확인한 뒤 다시 불러와 주세요.");
-  // Preserve keyboard focus when replacing the playback control with retry.
-  if (document.activeElement === playback) retry.focus();
-  updatePlayback();
-}
-
-const isolation = prepareIsolation(
-  new URL(`${import.meta.env.BASE_URL}coi.js`, document.baseURI),
-  note,
-);
-
-async function start(): Promise<void> {
-  if (loading || failed || disposed) return;
-  loading = true;
-  showLoadingScreen();
-  updatePlayback();
-  try {
-    // Do not initialize WASM in the document the isolation worker will replace.
-    if (await isolation === "reloading" || disposed) return;
-    const { createPlayer } = await import("./player");
-    if (disposed) return;
-    const loaded = await createPlayer(canvas, note, updateInstrument, updateGesture);
-    if (disposed) {
-      loaded.cleanup();
-      return;
-    }
-    player = loaded;
-    player.setHarmony(harmonyIndex);
-    loading = false;
-    hideLoadingScreen();
-    if (paused) {
-      player.pause();
-      announce("움직임을 멈췄습니다. 재생을 누르면 현과 파문이 움직입니다.");
-    } else {
-      player.play();
-      announce(audioNotice || "수면을 준비했습니다. 연주할 수 있습니다.", Boolean(audioNotice));
-    }
-    updatePlayback();
-  } catch (error) {
-    fail(error);
-  }
-}
-
-playback.addEventListener("click", () => {
-  if (loading || failed) return;
-  paused = !paused;
-  if (!player) {
-    void start();
-    return;
-  }
-  if (paused) player.pause();
-  else player.play();
-  announce(paused ? "" : audioNotice);
-  updatePlayback();
-}, { signal: events.signal });
+playback.addEventListener("click", () => session.toggle(), { signal: events.signal });
 
 retry.addEventListener("click", () => location.reload(), { signal: events.signal });
 
 harmonyMood.addEventListener("change", () => {
   if (!canPlayInstrument()) return;
   harmonyIndex = Number(harmonyMood.value);
-  player!.setHarmony(harmonyIndex);
+  session.player!.setHarmony(harmonyIndex);
   showHarmony();
 }, { signal: events.signal });
 harmonySeed.addEventListener("click", () => {
-  if (canPlayInstrument() && instrument.count === 0) player!.harmonyStrings();
+  if (canPlayInstrument() && instrument.count === 0) session.player!.harmonyStrings();
 }, { signal: events.signal });
 harmonyPluck.addEventListener("click", () => {
-  if (canPlayInstrument() && instrument.count > 0) player!.pluckString(Number(strength.value));
+  if (canPlayInstrument() && instrument.count > 0) session.player!.pluckString(Number(strength.value));
 }, { signal: events.signal });
 harmonyDemo.addEventListener("click", () => {
-  if (canPlayInstrument() && instrument.count > 0) player!.playPhrase();
+  if (canPlayInstrument() && instrument.count > 0) session.player!.playPhrase();
 }, { signal: events.signal });
 help.addEventListener("toggle", () => {
   if (help.open) {
-    dragGuide.cancel();
-    player?.stopGesture();
+    pointerSession.cancel();
   }
 }, { signal: events.signal });
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && canPlayInstrument()) {
-    dragGuide.cancel();
-    player!.stopGesture();
+    pointerSession.cancel();
   }
 }, { signal: events.signal });
 
 createString.addEventListener("click", () => {
-  if (canPlayInstrument()) player!.createString(Number(stringLength.value));
+  if (canPlayInstrument()) session.player!.createString(Number(stringLength.value));
 }, { signal: events.signal });
 previousString.addEventListener("click", () => {
-  if (canPlayInstrument() && instrument.count > 0) player!.selectString(-1);
+  if (canPlayInstrument() && instrument.count > 0) session.player!.selectString(-1);
 }, { signal: events.signal });
 nextString.addEventListener("click", () => {
-  if (canPlayInstrument() && instrument.count > 0) player!.selectString(1);
+  if (canPlayInstrument() && instrument.count > 0) session.player!.selectString(1);
 }, { signal: events.signal });
 pluckString.addEventListener("click", () => {
-  if (canPlayInstrument() && instrument.count > 0) player!.pluckString(Number(strength.value));
+  if (canPlayInstrument() && instrument.count > 0) session.player!.pluckString(Number(strength.value));
 }, { signal: events.signal });
 
-motion.addEventListener("change", () => {
-  // A preference change can stop motion, but never restarts it without intent.
-  if (motion.matches && !failed) {
-    paused = true;
-    player?.pause();
-    if (!loading) announce("움직임 줄이기 설정에 따라 멈췄습니다. 재생을 누르면 다시 시작합니다.");
-    updatePlayback();
-  }
-}, { signal: events.signal });
+motion.addEventListener("change", () => session.setReducedMotion(motion.matches), { signal: events.signal });
 
 window.addEventListener("error", (event) => note(`error: ${event.message}`), { signal: events.signal });
 window.addEventListener("unhandledrejection", (event) => note(`rejection: ${String(event.reason)}`), { signal: events.signal });
 
-function cleanup(): void {
-  disposed = true;
-  hideLoadingScreen(true);
+function cleanup(persisted = false): void {
+  session.dispose(persisted);
+  if (persisted) return;
   events.abort();
-  dragGuide.cleanup();
-  player?.cleanup();
+  pointerSession.cleanup();
 }
 
-// A bfcache entry must keep its player; the runtime handles tab visibility.
-window.addEventListener("pagehide", (event) => {
-  if (!event.persisted) cleanup();
-}, { signal: events.signal });
-if (import.meta.hot) import.meta.hot.dispose(cleanup);
+window.addEventListener("pagehide", (event) => cleanup(event.persisted), { signal: events.signal });
+if (import.meta.hot) import.meta.hot.dispose(() => cleanup());
 
 instrumentControls.hidden = false;
 showHarmony();
-updatePlayback();
-if (paused) {
-  hideLoadingScreen(true);
-  announce("움직임 줄이기 설정이 켜져 있습니다. 재생을 누르면 현과 파문이 움직입니다.");
-} else {
-  void start();
-}
+session.start();

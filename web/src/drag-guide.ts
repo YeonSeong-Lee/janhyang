@@ -1,30 +1,21 @@
 import { noteName, pitchLabel, referenceFrequency } from "./harmony";
 import type { GestureState } from "./player";
+import type { PointerPosition } from "./pointer-session";
 import "./drag-guide.css";
 
 /** A visual companion to Rive's gesture, never a second pitch or input engine. */
-export function createDragGuide(canvas: HTMLCanvasElement, enabled: () => boolean, referenceHarmony: () => number | null) {
+export function createDragGuide(canvas: HTMLCanvasElement, referenceHarmony: () => number | null) {
   const root = document.querySelector<HTMLElement>("#drag-guide")!;
   const caption = document.querySelector<HTMLElement>("#drag-caption")!;
   const note = document.querySelector<HTMLElement>("#drag-note")!;
   const hint = document.querySelector<HTMLElement>("#gesture-hint")!;
   const line = document.querySelector<SVGLineElement>("#guide-line")!;
   const target = document.querySelector<SVGCircleElement>("#guide-target")!;
-  const events = new AbortController();
-  let pointer: { id: number; touch: boolean; startX: number; startY: number; x: number; y: number } | undefined;
-  let gesture: GestureState = { cursor: "crosshair", drawing: false, previewFrequency: 0 };
-
-  function cancel(): void {
-    pointer = undefined;
-    root.dataset.visible = "false";
-  }
-
-  function render(): void {
-    if (!enabled()) {
-      cancel();
+  function render(pointer: PointerPosition | undefined, gesture: GestureState): void {
+    if (!pointer) {
+      root.dataset.visible = "false";
       return;
     }
-    if (!pointer) return;
     const { x, y, startX, startY, touch } = pointer;
     const length = Math.hypot(x - startX, y - startY);
     const holding = gesture.cursor === "grabbing";
@@ -74,39 +65,5 @@ export function createDragGuide(canvas: HTMLCanvasElement, enabled: () => boolea
     caption.style.transform = `translate3d(${left}px, ${top}px, 0)`;
   }
 
-  canvas.addEventListener("pointerdown", (event) => {
-    if (!enabled() || pointer || event.button !== 0) return;
-    pointer = { id: event.pointerId, touch: event.pointerType !== "mouse",
-      startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY };
-    gesture = { cursor: "crosshair", drawing: false, previewFrequency: 0 };
-  }, { signal: events.signal });
-  window.addEventListener("pointermove", (event) => {
-    if (event.pointerId !== pointer?.id) return;
-    pointer.x = event.clientX;
-    pointer.y = event.clientY;
-    render();
-  }, { signal: events.signal });
-  const release = (event: PointerEvent) => {
-    if (event.pointerId === pointer?.id) cancel();
-  };
-  window.addEventListener("pointerup", release, { signal: events.signal });
-  window.addEventListener("pointercancel", release, { signal: events.signal });
-  canvas.addEventListener("lostpointercapture", release, { signal: events.signal });
-  window.addEventListener("blur", cancel, { signal: events.signal });
-  window.addEventListener("resize", cancel, { signal: events.signal });
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) cancel();
-  }, { signal: events.signal });
-
-  return {
-    update(state: GestureState) {
-      gesture = state;
-      // Rive's previous release may arrive after the next native down.
-      // Its state controls what is shown, never ownership of the new hand:
-      // only native release/cancellation or an explicit control ends that.
-      render();
-    },
-    cancel,
-    cleanup() { cancel(); events.abort(); },
-  };
+  return { render };
 }
