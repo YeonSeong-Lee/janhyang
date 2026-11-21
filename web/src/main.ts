@@ -13,6 +13,7 @@ const notice = document.querySelector<HTMLDivElement>("#notice")!;
 const status = document.querySelector<HTMLParagraphElement>("#status")!;
 const loadingScreen = document.querySelector<HTMLElement>("#loading-screen")!;
 const loadingCaption = document.querySelector<HTMLParagraphElement>("#loading-caption")!;
+const waterIntro = document.querySelector<HTMLElement>(".water-intro")!;
 const playback = document.querySelector<HTMLButtonElement>("#playback")!;
 const retry = document.querySelector<HTMLButtonElement>("#retry")!;
 const instrumentControls = document.querySelector<HTMLFieldSetElement>("#instrument-controls")!;
@@ -153,6 +154,7 @@ function renderSelection(): void {
 
 function updateInstrument(state: InstrumentState): void {
   lastPlucked = state.notesPlayed > instrument.notesPlayed;
+  if (instrument.count === 0 && state.count > 0) waterIntro.toggleAttribute("data-played", true);
   const seeded = instrument.count === 0 && state.count > 0 && document.activeElement === harmonySeed;
   instrument = state;
   renderSelection();
@@ -171,6 +173,7 @@ function renderPlayback(state: Readonly<PlaybackState>): void {
   retry.hidden = !failed;
   if (failed && document.activeElement === playback) retry.focus();
   playback.hidden = failed;
+  playback.dataset.phase = state.phase;
   playback.setAttribute("aria-disabled", String(loading));
   playback.textContent = loading ? messages.busy : state.phase === "playing" ? messages.pause : messages.play;
   canvas.inert = state.phase !== "playing";
@@ -184,6 +187,10 @@ function updateGesture(state: GestureState): void {
 }
 
 playback.addEventListener("click", () => session.toggle(), { signal: events.signal });
+
+canvas.addEventListener("pointerdown", (event) => {
+  if (event.button === 0 && canPlayInstrument()) waterIntro.toggleAttribute("data-played", true);
+}, { signal: events.signal });
 
 retry.addEventListener("click", () => location.reload(), { signal: events.signal });
 

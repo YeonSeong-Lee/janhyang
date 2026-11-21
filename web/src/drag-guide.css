@@ -19,11 +19,14 @@
   inset: 0 auto auto 0;
   width: max-content;
   max-width: min(224px, calc(100vw - 32px));
-  text-shadow: 0 1px 10px #05070b, 0 1px 3px #05070b;
+  padding: .45rem .75rem;
+  border: 1px solid var(--line);
+  border-radius: .875rem;
+  background: var(--surface);
 }
-#drag-note { display: block; margin-bottom: 4px; color: #b9dfff; font-size: 12px; letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+#drag-note { display: block; color: var(--water); font-size: .875rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 #drag-note:empty { display: none; }
-#gesture-hint { margin: 0; color: #cbd9e9; font-size: 13px; line-height: 1.6; word-break: keep-all; overflow-wrap: anywhere; }
+#gesture-hint { margin: 0; color: #cbd9e9; font-size: .8125rem; line-height: 1.6; word-break: keep-all; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) {
   #drag-guide, #drag-guide[data-visible="true"] { transition: none; }
 }

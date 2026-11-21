@@ -1,0 +1,353 @@
+:root {
+  color-scheme: dark;
+  font: 100%/1.5 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  color: #f0f3f7;
+  background: #05070b;
+  --secondary: #b5bfca;
+  --water: #b7deef;
+  --surface: rgb(30 34 40 / 92%);
+  --line: rgb(218 233 246 / 17%);
+  --control: #30363e;
+  --edge: max(0.75rem, env(safe-area-inset-left), env(safe-area-inset-right));
+  --bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { position: relative; min-height: 100dvh; isolation: isolate; }
+#stage { display: block; width: 100%; height: 100dvh; touch-action: none; }
+[hidden] { display: none !important; }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The first touch passes straight through the cover to the live instrument. */
+.water-intro {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  mix-blend-mode: screen;
+  text-align: center;
+  transition: opacity 220ms ease-out;
+}
+.water-ripples {
+  position: absolute;
+  width: min(clamp(40rem, 104vw, 100rem), 168dvh);
+  aspect-ratio: 4.65;
+  top: 56%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.water-ripples > span {
+  position: absolute;
+  inset: 0;
+  animation: water-crest 15s linear infinite both paused;
+}
+.water-ripples > span::before,
+.water-ripples > span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+/* The blue shoulder spreads past the silver lip, especially on the near side. */
+.water-ripples > span::before {
+  background: linear-gradient(94deg, #344b60, #b2d3eb 14%, #41586f 25%, #648093 38%,
+    #dbe5ea 50%, #587187 61%, #344958 71%, #c0e2fa 84%, #3e5266 97%);
+  mask-image: radial-gradient(ellipse 50% 49% at 50% 50%,
+    transparent 72%, rgb(0 0 0 / 10%) 79%, rgb(0 0 0 / 44%) 84%, transparent 87%,
+    rgb(0 0 0 / 15%) 89%, rgb(0 0 0 / 86%) 92%, rgb(0 0 0 / 26%) 95%, transparent 100%);
+}
+.water-ripples > span::after {
+  background:
+    radial-gradient(ellipse 10% 20% at 51% 95%, #fff 9%, #e4eff5 32%, transparent),
+    radial-gradient(ellipse 7% 12% at 49% 5%, #fff8ec 10%, #d3dce4 38%, transparent),
+    radial-gradient(ellipse 6% 26% at 14% 22%, #e4f3ff, transparent),
+    radial-gradient(ellipse 6% 16% at 80% 83%, #d4edff, transparent),
+    linear-gradient(104deg, transparent 3%, #b3d1e4 8%, transparent 18% 28%, #8ea6b4 34%,
+      transparent 39% 63%, #8fabbf 68%, transparent 72% 82%, #bcdcf1 91%, transparent);
+  mask-image: radial-gradient(ellipse 49.7% 49% at 50% 48.5%,
+    transparent 86%, rgb(0 0 0 / 28%) 88%, #000 89.5% 91%, rgb(0 0 0 / 33%) 93%, transparent 95%);
+  animation: inherit;
+  animation-name: water-reflection;
+}
+/* Stagger the same travelling wave so the very first frame has a full surface. */
+.water-ripples > span:nth-child(1) { animation-delay: -1.25s; }
+.water-ripples > span:nth-child(2) { animation-delay: -3.75s; }
+.water-ripples > span:nth-child(3) { animation-delay: -6.25s; }
+.water-ripples > span:nth-child(4) { animation-delay: -8.75s; }
+.water-ripples > span:nth-child(5) { animation-delay: -11.25s; }
+.water-ripples > span:nth-child(6) { animation-delay: -13.75s; }
+@keyframes water-crest {
+  from { transform: translateY(-5%) scale(.14, .12); opacity: 0; }
+  12%, 36% { opacity: 1; }
+  68% { opacity: .75; }
+  86% { opacity: .38; }
+  to { transform: translateY(9%) scale(1.15, 1.12); opacity: 0; }
+}
+@keyframes water-reflection {
+  from { transform: rotate(-.7deg) scaleY(.96); opacity: .55; }
+  28%, 58% { opacity: 1; }
+  to { transform: rotate(.5deg) scaleY(1.04); opacity: .4; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  main:has(#playback[data-phase="playing"]) .water-intro:not([data-played]) .water-ripples > span {
+    animation-play-state: running;
+  }
+}
+.water-title {
+  position: absolute;
+  inset-inline: var(--edge);
+  top: max(12%, env(safe-area-inset-top));
+  overflow-wrap: anywhere;
+}
+.water-title h1 {
+  margin: 0;
+  font: 400 clamp(3.5rem, 7vw, 6rem)/1.15 "AppleMyungjo", "Batang", "Noto Serif KR", Georgia, serif;
+  letter-spacing: -.045em;
+  color: #f3f4f4;
+}
+.water-title p {
+  max-width: 35ch;
+  margin: 1rem auto 0;
+  color: #bac5d0;
+  font-size: clamp(.9375rem, 1.4vw, 1.125rem);
+  line-height: 1.65;
+  white-space: pre-line;
+  text-wrap: balance;
+}
+:lang(ko) :is(.water-title, .help-sheet, .message) { word-break: keep-all; }
+.water-intro[data-played] { opacity: 0; }
+main:has(#stage[inert]) .water-title p { visibility: hidden; }
+
+button, select, summary {
+  min-height: 44px;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+button, select {
+  padding: .625rem .875rem;
+  border: 1px solid var(--line);
+  border-radius: .875rem;
+  background: var(--control);
+}
+/* WebKit's native menu uses its compact height when only min-height is set. */
+select { height: max(44px, 2.75em); }
+button { font-weight: 550; overflow-wrap: anywhere; }
+button[aria-disabled="true"], select:disabled { color: #a8b1bb; cursor: default; }
+:where(button, summary, select, input, a, pre):focus-visible {
+  outline: 2px solid var(--water);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  button:not([aria-disabled="true"]):hover, .controls summary:hover, .language-picker:hover {
+    background-color: #424b56;
+    color: #fff;
+  }
+}
+button:not([aria-disabled="true"]):active, .controls summary:active, .language-picker:active {
+  background-color: #4b5764;
+}
+
+/* The disclosure stays in its original slot while its contents scroll above it. */
+.controls {
+  position: fixed;
+  z-index: 3;
+  inset-inline: var(--edge);
+  bottom: var(--bottom);
+  width: max-content;
+  max-width: calc(100% - 2 * var(--edge));
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .3125rem;
+  border-radius: 1.9rem;
+  font-size: .875rem;
+  font-weight: 550;
+}
+.controls, .help-sheet, .message, #report {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 .5rem 2rem rgb(0 0 0 / 32%);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+.controls:not(:has(> :not([hidden]))) { visibility: hidden; }
+#playback, .controls summary, .language-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: .55rem .95rem;
+  border: 0;
+  border-radius: 1.5rem;
+  line-height: 1.35;
+}
+#playback { background: #e2ecf2; color: #16222c; }
+#playback:not([aria-disabled="true"]):hover { background: #fff; }
+#playback:not([aria-disabled="true"]):active { background: #bfd5e1; }
+#playback[aria-disabled="true"] { background: var(--control); color: var(--secondary); cursor: wait; }
+#playback::before {
+  content: "";
+  flex: none;
+  width: .75rem;
+  height: .875rem;
+  background: currentColor;
+  clip-path: polygon(10% 0, 100% 50%, 10% 100%);
+}
+#playback[data-phase="playing"]::before {
+  background: linear-gradient(to right, currentColor 33%, transparent 33% 67%, currentColor 67%);
+  clip-path: none;
+}
+#playback[aria-disabled="true"]::before {
+  width: .75rem;
+  height: .75rem;
+  border: 2px dotted currentColor;
+  border-radius: 50%;
+  background: none;
+  clip-path: none;
+}
+.controls details { min-width: 0; }
+.controls summary { list-style: none; overflow-wrap: anywhere; text-align: center; }
+.controls summary::-webkit-details-marker { display: none; }
+.controls summary::after {
+  content: "";
+  flex: none;
+  width: .43rem;
+  height: .43rem;
+  border: solid currentColor;
+  border-width: 1.5px 1.5px 0 0;
+  transform: translateY(20%) rotate(-45deg);
+}
+.controls details[open] summary { background: var(--control); }
+.controls details[open] summary::after { transform: translateY(-20%) rotate(135deg); }
+
+.language-picker {
+  position: relative;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 .625rem;
+  color: var(--secondary);
+}
+.language-picker span { direction: ltr; font-size: .75rem; font-weight: 650; }
+.language-picker select {
+  width: 6rem;
+  padding: 0;
+  border: none;
+  color: inherit;
+  background: transparent;
+}
+.language-picker option { color: #f0f3f7; background: #20242a; }
+@supports (field-sizing: content) {
+  .language-picker select { field-sizing: content; width: auto; max-width: 10rem; }
+}
+.language-picker:focus-within { outline: 2px solid var(--water); outline-offset: 2px; }
+.language-picker select:focus-visible { outline: none; }
+
+.help-sheet {
+  position: absolute;
+  bottom: calc(100% + .625rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(28rem, calc(100vw - 2 * var(--edge)));
+  max-height: min(72dvh, calc(100dvh - 100% - var(--bottom) - max(1.5rem, env(safe-area-inset-top))));
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  background-color: #1d2127;
+  border-radius: 1.5rem;
+  scrollbar-width: thin;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.help-sheet p { margin: 0; font-size: .875rem; line-height: 1.65; }
+.help-sheet > p + p { margin-top: .65rem; }
+#instructions { color: #e3eaf1; }
+.help-sheet > p { color: var(--secondary); }
+.help-sheet select { width: 100%; }
+#instrument-controls {
+  min-width: 0;
+  margin: 1.5rem 0;
+  padding: 0;
+  border: 0;
+}
+#instrument-controls legend, #harmony-title {
+  margin: 0 0 .875rem;
+  padding: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+  letter-spacing: -.025em;
+}
+.instrument-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: .625rem;
+}
+.instrument-fields p { grid-column: 1 / -1; color: var(--secondary); }
+.instrument-fields label { display: grid; gap: .375rem; }
+#selection { margin-top: .5rem; color: var(--water); font-variant-numeric: tabular-nums; }
+
+.message {
+  position: absolute;
+  z-index: 4;
+  inset-inline: var(--edge);
+  top: max(1rem, env(safe-area-inset-top));
+  width: fit-content;
+  max-width: min(34rem, calc(100% - 2 * var(--edge)));
+  margin-inline: auto;
+  padding: .875rem 1.125rem;
+  border-radius: 1.125rem;
+  font-size: .9375rem;
+  overflow-wrap: anywhere;
+}
+#status { margin: 0; }
+#retry { margin-top: .75rem; }
+#report {
+  position: fixed;
+  z-index: 5;
+  inset-inline-start: var(--edge);
+  bottom: calc(var(--bottom) + 4.5rem);
+  max-width: calc(100% - 2 * var(--edge));
+  max-height: 35dvh;
+  overflow: auto;
+  margin: 0;
+  padding: .5rem .75rem;
+  border-radius: .875rem;
+  font: 12px/1.5 ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+@media (max-width: 36rem) {
+  .controls { gap: 0; }
+  #playback, .controls summary { padding-inline: .75rem; }
+  .language-picker select { position: absolute; inset: 0; width: 100%; opacity: 0; }
+  .water-title { top: 18%; }
+}
+@media (max-height: 28rem) {
+  :root { --bottom: max(.5rem, env(safe-area-inset-bottom)); }
+  .water-title { top: max(.75rem, env(safe-area-inset-top)); }
+  .water-title h1 { font-size: 2.75rem; }
+  .water-title p { margin-top: .375rem; font-size: .875rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .water-intro { transition: none; }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root { --surface: #20242a; --line: #7b8794; --secondary: #e0e5e9; }
+  .controls, .help-sheet, .message, #report { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

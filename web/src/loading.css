@@ -7,7 +7,7 @@
   display: grid;
   padding: max(28px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(84px, calc(env(safe-area-inset-bottom) + 72px)) max(24px, env(safe-area-inset-left));
   overflow: auto;
-  background: #05070b;
+  background: radial-gradient(ellipse at 50% 42%, #101923 0%, #05070b 62%);
   color: #e0e8f3;
   transition: opacity 400ms ease-out;
 }
@@ -17,12 +17,11 @@
 .loading-name {
   margin: 0;
   font-family: "AppleMyungjo", "Batang", "Noto Serif KR", serif;
-  font-size: 32px;
+  font-size: clamp(2.25rem, 4vw, 3.25rem);
   font-weight: 400;
   line-height: 1.5;
-  letter-spacing: .18em;
-  text-indent: .18em;
-  color: var(--loading-water);
+  letter-spacing: -.045em;
+  color: #f3f4f4;
 }
 .loading-water {
   display: block;
@@ -50,9 +49,10 @@
 }
 .loading-ripple-second { animation-delay: 240ms; }
 .loading-ripple-third { animation-delay: 480ms; }
-#loading-title { margin: 0; font-size: clamp(21px, 3vw, 27px); font-weight: 400; line-height: 1.65; letter-spacing: -.025em; }
-.loading-description { margin: 16px 0 0; color: #adbed3; font-size: 14px; line-height: 1.9; }
-#loading-caption { margin: 32px 0 0; color: #8fabc2; font-size: 12px; line-height: 1.8; }
+#loading-title { margin: 0; font-size: clamp(1.375rem, 3vw, 2rem); font-weight: 550; line-height: 1.4; letter-spacing: -.035em; }
+#loading-title, .loading-description { white-space: pre-line; text-wrap: balance; }
+.loading-description { margin: .875rem 0 0; color: #b5bfca; font-size: .9375rem; line-height: 1.65; }
+#loading-caption { margin: 1.75rem 0 0; color: #aec3d4; font-size: .8125rem; line-height: 1.6; }
 .loading-copy { overflow-wrap: anywhere; }
 .loading-copy:lang(ko) { word-break: keep-all; }
 

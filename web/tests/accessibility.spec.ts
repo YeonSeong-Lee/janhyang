@@ -68,6 +68,7 @@ test("keyboard activates instrument controls with native length selection, respe
   await page.keyboard.press("Enter");
   const selection = page.locator("#selection");
   await expect(selection).toContainText("전체 1개 중 1번째 현");
+  await expect(page.locator(".water-intro")).toHaveCSS("opacity", "0");
   const firstDescription = await selection.textContent();
   await page.keyboard.press("Shift+Tab");
   await expect(length).toBeFocused();
@@ -102,8 +103,11 @@ test("keyboard activates instrument controls with native length selection, respe
 test("button controls include strings drawn with a pointer", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: "일시정지", exact: true })).toBeEnabled();
+  const intro = page.locator(".water-intro");
+  await expect(intro).toHaveCSS("opacity", "1");
   await page.mouse.move(60, 100);
   await page.mouse.down();
+  await expect(intro).toHaveCSS("opacity", "0");
   await page.mouse.move(260, 100, { steps: 12 });
   await page.mouse.up();
   const selection = page.locator("#selection");

@@ -61,7 +61,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 320, height: 568 
   });
 }
 
-test("reduced motion keeps the loading illustration still and preserves keyboard focus", async ({ page }) => {
+test("reduced motion keeps the loading illustration still and preserves keyboard focus", async ({ page, browserName }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   let finishLoading!: () => void;
   const gate = new Promise<void>((resolve) => { finishLoading = resolve; });
@@ -72,7 +72,8 @@ test("reduced motion keeps the loading illustration still and preserves keyboard
   try {
     await page.goto("/");
     await expect(page.locator("#loading-screen")).toBeHidden();
-    await page.keyboard.press("Tab");
+    // Option-Tab includes buttons with macOS WebKit's default keyboard navigation.
+    await page.keyboard.press(browserName === "webkit" && process.platform === "darwin" ? "Alt+Tab" : "Tab");
     const playback = page.locator("#playback");
     await expect(playback).toBeFocused();
     await page.keyboard.press("Enter");
@@ -81,9 +82,14 @@ test("reduced motion keeps the loading illustration still and preserves keyboard
     expect(await scene.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
     await expect(playback).toBeFocused();
     // Changing the preference during a request must also leave the scene still.
+    const motion = await page.evaluateHandle(() => matchMedia("(prefers-reduced-motion: reduce)"));
+    // WebKit can update CSS before it delivers the change to existing media queries.
+    const prefersLessMotion = () => motion.evaluate(query => query.matches);
     await page.emulateMedia({ reducedMotion: "no-preference" });
+    await expect.poll(prefersLessMotion).toBe(false);
     await expect.poll(() => scene.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBeGreaterThan(0);
     await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect.poll(prefersLessMotion).toBe(true);
     expect(await scene.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
     await expect(page.locator("#status")).toHaveText("수면을 준비하고 있습니다…");
     finishLoading();

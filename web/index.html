@@ -41,84 +41,20 @@
         "image": "https://janhyang.yeonseong.dev/og-image.png"
       }
     </script>
-    <style>
-      :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #e0e8f3; background: #05070b; }
-      :root { --safe-start: env(safe-area-inset-left); --safe-end: env(safe-area-inset-right); }
-      :root[dir="rtl"] { --safe-start: env(safe-area-inset-right); --safe-end: env(safe-area-inset-left); }
-      * { box-sizing: border-box; }
-      body { margin: 0; }
-      main { position: relative; min-height: 100dvh; }
-      #stage { display: block; width: 100%; height: 100dvh; touch-action: none; }
-      .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-      .controls {
-        position: fixed;
-        inset-inline-end: max(12px, var(--safe-end));
-        inset-block-end: max(12px, env(safe-area-inset-bottom));
-        display: flex; flex-wrap: wrap; justify-content: end; gap: 8px; align-items: end;
-        max-width: calc(100% - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)));
-        pointer-events: none;
-      }
-      .controls > * { pointer-events: auto; }
-      button, summary { min-height: 44px; padding: 10px 14px; font: inherit; cursor: pointer; touch-action: manipulation; }
-      button, details, .message, #report { border: 1px solid #67778e; border-radius: 8px; background: #0b1019; color: inherit; }
-      button { flex-shrink: 0; }
-      button[aria-disabled="true"] { cursor: not-allowed; color: #9baac0; }
-      #playback { max-width: 100%; overflow-wrap: anywhere; }
-      #playback[aria-disabled="true"] { cursor: wait; }
-      :where(button, summary, select, input, a, pre):focus-visible { outline: 2px solid #b9dfff; outline-offset: 3px; }
-      summary:focus-visible { outline-offset: -4px; border-radius: 6px; }
-      @media (hover: hover) {
-        button:not([aria-disabled="true"]):hover, summary:hover { background: #1b2b40; color: #fff; }
-        button:not([aria-disabled="true"]):hover { border-color: #b9dfff; }
-      }
-      button:not([aria-disabled="true"]):active, summary:active { background: #263b53; color: #fff; }
-      details { min-width: 0; max-width: 32rem; max-height: 70dvh; overflow: auto; overscroll-behavior: contain; }
-      details[open] { flex-basis: 100%; order: -1; }
-      @media (max-width: 480px) {
-        .controls { gap: 6px; }
-        .controls > button, summary { padding-inline: 10px; font-size: 14px; }
-      }
-      .language-picker { display: flex; align-items: center; gap: 4px; padding-inline-start: 8px;
-        border: 1px solid #67778e; border-radius: 8px; background: #0b1019; }
-      .language-picker span { direction: ltr; font-size: 12px; color: #adbed3; }
-      .language-picker select { width: 6em; border: 0; border-radius: 8px; font-size: 14px; cursor: pointer; }
-      @supports (field-sizing: content) {
-        .language-picker select { field-sizing: content; width: auto; max-width: 48vw; padding-inline: 2px; }
-      }
-      #loading-title, .loading-description { white-space: pre-line; }
-      summary { overflow-wrap: anywhere; }
-      details p { margin: 0; padding: 0 14px 14px; line-height: 1.6; }
-      fieldset { min-width: 0; margin: 0 14px 14px; padding: 12px; border: 1px solid #67778e; border-radius: 6px; }
-      legend { padding-inline: 4px; }
-      .instrument-fields { display: grid; gap: 10px; }
-      .instrument-fields label { display: grid; gap: 6px; }
-      .instrument-fields button { min-width: 0; width: 100%; overflow-wrap: anywhere; }
-      select { min-width: 0; width: 100%; min-height: 44px; font: inherit; color: inherit; background: #0b1019; border: 1px solid #67778e; border-radius: 4px; }
-      fieldset p { padding: 0; overflow-wrap: anywhere; }
-      .message {
-        position: absolute;
-        inset-inline: max(12px, var(--safe-start)) max(12px, var(--safe-end));
-        inset-block-start: max(12px, env(safe-area-inset-top));
-        width: fit-content; max-width: 36rem; margin-inline: auto;
-        padding: 12px 16px; line-height: 1.6; overflow-wrap: anywhere;
-      }
-      #status { margin: 0; }
-      #retry { margin-top: 12px; }
-      #report {
-        position: fixed;
-        inset-inline-start: max(12px, var(--safe-start));
-        inset-block-end: max(72px, calc(env(safe-area-inset-bottom) + 60px));
-        margin: 0; padding: 8px 10px;
-        max-width: calc(100% - 24px); max-height: 40dvh; overflow: auto;
-        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-        white-space: pre-wrap; overflow-wrap: anywhere;
-      }
-      [hidden] { display: none !important; }
-    </style>
+    <link rel="stylesheet" href="/src/interface.css" />
   </head>
   <body>
     <main>
-      <h1 class="visually-hidden" data-i18n="brand">잔향</h1>
+      <div class="water-intro">
+        <div class="water-ripples" aria-hidden="true">
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+        </div>
+        <div class="water-title">
+          <h1 data-i18n="brand">잔향</h1>
+          <p aria-hidden="true" data-i18n="description">선을 그으면 현이 되고,<br />당겼다 놓으면 소리와 파문이 번져요.</p>
+        </div>
+      </div>
       <section id="loading-screen" aria-labelledby="loading-title" data-state="loading">
         <div class="loading-content">
           <div class="loading-artwork">
@@ -168,60 +104,60 @@
       <div class="controls">
         <button id="playback" type="button" aria-controls="stage" hidden>재생</button>
         <details>
-          <summary data-i18n="help">사용 안내</summary>
-          <p id="instructions" data-i18n="instructions">빈 수면을 드래그해 현을 만들고, 만든 현을 옆으로 당겼다 놓아보세요. 긴 현은 낮게, 짧은 현은 높게 울립니다. 그린 길이가 그대로 음높이가 되며 자동으로 조율하지 않습니다. 손 옆에는 실제 주파수와 가장 가까운 음 이름이 표시됩니다.</p>
-          <section id="harmony-panel" aria-labelledby="harmony-title">
-            <div class="harmony-heading">
+          <summary><span data-i18n="help">사용 안내</span></summary>
+          <div class="help-sheet">
+            <p id="instructions" data-i18n="instructions">빈 수면을 드래그해 현을 만들고, 만든 현을 옆으로 당겼다 놓아보세요. 긴 현은 낮게, 짧은 현은 높게 울립니다. 그린 길이가 그대로 음높이가 되며 자동으로 조율하지 않습니다. 손 옆에는 실제 주파수와 가장 가까운 음 이름이 표시됩니다.</p>
+            <section id="harmony-panel" aria-labelledby="harmony-title">
               <h2 id="harmony-title"><span data-i18n="harmonyTitle">화음 참고하기</span> <span id="harmony-chord" dir="ltr">Am</span></h2>
-            </div>
-            <div class="harmony-tuning">
-              <label for="harmony-mood" data-i18n="reference">참고할 화음</label>
-              <select id="harmony-mood" aria-describedby="harmony-description" autocomplete="off">
-                <option data-i18n="calm" value="0">차분하게</option>
-                <option data-i18n="clear" value="1">맑게</option>
-                <option data-i18n="warm" value="2">따뜻하게</option>
-              </select>
-              <div data-i18n-label="tones" role="group" id="harmony-notes" aria-label="어울리는 음"></div>
-              <span dir="ltr" id="harmony-note" aria-label="현재 음">—</span>
-            </div>
-            <p id="harmony-description">라·도·미가 차분하게 어울려요.</p>
-            <label class="harmony-guide-option" for="harmony-guide">
-              <input id="harmony-guide" type="checkbox" checked /> <span data-i18n="showGuide">화음 길이 안내 표시</span>
-            </label>
-            <div class="harmony-actions">
-              <button data-i18n="seed" id="harmony-seed" type="button" aria-disabled="true">어울리는 현 3개 놓기</button>
-              <button data-i18n="hear" id="harmony-pluck" type="button" aria-disabled="true" hidden>이 현 들어보기</button>
-              <button id="harmony-demo" type="button" aria-disabled="true" aria-pressed="false">짧은 연주 듣기</button>
-            </div>
-            <p id="harmony-feedback" aria-live="polite" aria-atomic="true">그린 길이가 곧 음높이예요. 자동으로 조율하지 않아요.</p>
-          </section>
-          <p data-i18n="harmonyHelp">반투명 끝선은 화음의 참고 길이이며, 맞추지 않아도 됩니다. 참고할 화음을 바꿔도 만든 현의 소리는 바뀌지 않습니다. ‘어울리는 현 3개 놓기’를 누를 때만 선택한 화음으로 예시 현을 만듭니다. ‘짧은 연주 듣기’는 지금 만든 현으로 약 5초간 연주합니다. 수면을 누르거나 Esc를 누르면 멈춥니다.</p>
-          <p data-i18n="playHelp">일시정지를 누르면 움직임과 소리가 멈춥니다. 움직임 줄이기 설정에서는 재생을 눌러 시작하세요. 키보드나 클릭으로 연주하려면 아래 버튼을 사용하세요.</p>
-          <fieldset id="instrument-controls" aria-describedby="instrument-hint" hidden>
-            <legend data-i18n="buttons">버튼으로 연주</legend>
-            <div class="instrument-fields">
-              <p id="instrument-hint">재생을 누른 뒤 현을 만들고 연주할 수 있습니다.</p>
-              <label for="string-length"><span data-i18n="length">새 현 길이</span>
-                <select id="string-length" name="string-length" autocomplete="off">
-                  <option data-i18n="short" value="0.3">짧게</option>
-                  <option data-i18n="medium" value="0.5" selected>중간</option>
-                  <option data-i18n="long" value="0.75">길게</option>
+              <div class="harmony-tuning">
+                <label for="harmony-mood" data-i18n="reference">참고할 화음</label>
+                <select id="harmony-mood" aria-describedby="harmony-description" autocomplete="off">
+                  <option data-i18n="calm" value="0">차분하게</option>
+                  <option data-i18n="clear" value="1">맑게</option>
+                  <option data-i18n="warm" value="2">따뜻하게</option>
                 </select>
+                <div data-i18n-label="tones" role="group" id="harmony-notes" aria-label="어울리는 음"></div>
+                <span dir="ltr" id="harmony-note" aria-label="현재 음">—</span>
+              </div>
+              <p id="harmony-description">라·도·미가 차분하게 어울려요.</p>
+              <label class="harmony-guide-option" for="harmony-guide">
+                <input id="harmony-guide" type="checkbox" checked /> <span data-i18n="showGuide">화음 길이 안내 표시</span>
               </label>
-              <button data-i18n="create" id="create-string" type="button" aria-disabled="true">현 만들기</button>
-              <p id="selection" role="status" aria-atomic="true">아직 현이 없습니다. 현 만들기를 눌러 시작하세요.</p>
-              <button data-i18n="previous" id="previous-string" type="button" aria-disabled="true">이전 현</button>
-              <button data-i18n="next" id="next-string" type="button" aria-disabled="true">다음 현</button>
-              <label for="pluck-strength"><span data-i18n="strength">튕기는 세기</span>
-                <select id="pluck-strength" name="pluck-strength" autocomplete="off">
-                  <option data-i18n="soft" value="0.25">약하게</option>
-                  <option data-i18n="normal" value="0.5" selected>보통</option>
-                  <option data-i18n="strong" value="0.85">강하게</option>
-                </select>
-              </label>
-              <button data-i18n="pluck" id="pluck-string" type="button" aria-disabled="true">선택한 현 튕기기</button>
-            </div>
-          </fieldset>
+              <div class="harmony-actions">
+                <button data-i18n="seed" id="harmony-seed" type="button" aria-disabled="true">어울리는 현 3개 놓기</button>
+                <button data-i18n="hear" id="harmony-pluck" type="button" aria-disabled="true" hidden>이 현 들어보기</button>
+                <button id="harmony-demo" type="button" aria-disabled="true" aria-pressed="false">짧은 연주 듣기</button>
+              </div>
+              <p id="harmony-feedback" aria-live="polite" aria-atomic="true">그린 길이가 곧 음높이예요. 자동으로 조율하지 않아요.</p>
+            </section>
+            <p data-i18n="harmonyHelp">반투명 끝선은 화음의 참고 길이이며, 맞추지 않아도 됩니다. 참고할 화음을 바꿔도 만든 현의 소리는 바뀌지 않습니다. ‘어울리는 현 3개 놓기’를 누를 때만 선택한 화음으로 예시 현을 만듭니다. ‘짧은 연주 듣기’는 지금 만든 현으로 약 5초간 연주합니다. 수면을 누르거나 Esc를 누르면 멈춥니다.</p>
+            <p data-i18n="playHelp">일시정지를 누르면 움직임과 소리가 멈춥니다. 움직임 줄이기 설정에서는 재생을 눌러 시작하세요. 키보드나 클릭으로 연주하려면 아래 버튼을 사용하세요.</p>
+            <fieldset id="instrument-controls" aria-describedby="instrument-hint" hidden>
+              <legend data-i18n="buttons">버튼으로 연주</legend>
+              <div class="instrument-fields">
+                <p id="instrument-hint">재생을 누른 뒤 현을 만들고 연주할 수 있습니다.</p>
+                <label for="string-length"><span data-i18n="length">새 현 길이</span>
+                  <select id="string-length" name="string-length" autocomplete="off">
+                    <option data-i18n="short" value="0.3">짧게</option>
+                    <option data-i18n="medium" value="0.5" selected>중간</option>
+                    <option data-i18n="long" value="0.75">길게</option>
+                  </select>
+                </label>
+                <button data-i18n="create" id="create-string" type="button" aria-disabled="true">현 만들기</button>
+                <p id="selection" role="status" aria-atomic="true">아직 현이 없습니다. 현 만들기를 눌러 시작하세요.</p>
+                <button data-i18n="previous" id="previous-string" type="button" aria-disabled="true">이전 현</button>
+                <button data-i18n="next" id="next-string" type="button" aria-disabled="true">다음 현</button>
+                <label for="pluck-strength"><span data-i18n="strength">튕기는 세기</span>
+                  <select id="pluck-strength" name="pluck-strength" autocomplete="off">
+                    <option data-i18n="soft" value="0.25">약하게</option>
+                    <option data-i18n="normal" value="0.5" selected>보통</option>
+                    <option data-i18n="strong" value="0.85">강하게</option>
+                  </select>
+                </label>
+                <button data-i18n="pluck" id="pluck-string" type="button" aria-disabled="true">선택한 현 튕기기</button>
+              </div>
+            </fieldset>
+          </div>
         </details>
         <label class="language-picker" hidden>
           <span aria-hidden="true">文/A</span>
@@ -230,7 +166,7 @@
       </div>
       <pre data-i18n-label="diagnostics" id="report" role="region" aria-label="진단 정보" tabindex="0" hidden></pre>
       <noscript>
-        <style>#loading-screen, .controls { display: none; } .message { max-height: 90dvh; overflow: auto; } .message li { margin: 8px 0; }</style>
+        <style>#loading-screen, .controls { display: none; } .water-intro { opacity: 0; } .message { max-height: 90dvh; overflow: auto; } .message li { margin: 8px 0; }</style>
         <div class="message">
           <p>잔향은 JavaScript로 소리와 파문을 만듭니다. 브라우저에서 JavaScript를 켜고 다시 열어 주세요.</p>
           <details><summary lang="en">文/A · Languages</summary><ul><!-- language-notices --></ul></details>
@@ -263,6 +199,7 @@
         document.querySelector(".loading-name").textContent = copy.brand;
         document.getElementById("loading-title").textContent = copy.intro;
         document.querySelector(".loading-description").textContent = copy.description;
+        document.querySelector(".water-title p").textContent = copy.description;
         document.getElementById("loading-caption").textContent = copy.preparing;
         // The remaining static controls contain Korean until their catalog is ready.
         document.querySelector(".controls details").hidden = selected.lang !== "ko";
