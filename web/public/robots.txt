@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://janhyang-924.pages.dev/sitemap.xml
+Sitemap: https://janhyang.yeonseong.dev/sitemap.xml

@@ -1,36 +1,23 @@
 # 배포
 
-배포 주소: [janhyang-924.pages.dev](https://janhyang-924.pages.dev/)
+배포 주소: [janhyang.yeonseong.dev](https://janhyang.yeonseong.dev/)
 
 자동 배포는 [GitHub Actions의 CI/CD 워크플로](https://github.com/YeonSeong-Lee/janhyang/actions/workflows/ci-cd.yml)를 사용합니다.
 `main` 대상 PR에서는 의존성 설치, 타입 검사, Vite 빌드, Chromium 회귀 테스트를 수행합니다.
-`main`에 푸시하면 같은 검사를 통과한 빌드 결과를 Cloudflare Pages에 배포합니다.
+`main`에 푸시하면 같은 검사를 통과한 빌드 결과를 Cloudflare Worker에 배포합니다.
 배포 작업은 검사 작업이 만든 아티팩트를 사용하며, 아티팩트는 하루 동안 보관합니다.
 
 ## 프로젝트 설정
 
-[Cloudflare Pages 프로젝트](https://dash.cloudflare.com/6ccaac2e604c4c353e2e198c73cac480/pages/view/janhyang)는
-`YeonSeong-Lee/janhyang` 저장소에서 만든 빌드를 Wrangler로 업로드합니다.
-기존 Pages 프로젝트와 주소를 유지하고, Cloudflare 자체 Git 자동 빌드는 중복 배포를 막기 위해 끕니다.
+[janhyang Worker](https://dash.cloudflare.com/6ccaac2e604c4c353e2e198c73cac480/workers/services/view/janhyang/production/domains)는 빌드된 정적 파일을 제공합니다. Worker의 Domains 탭에 `janhyang.yeonseong.dev`를 Production Custom Domain으로 연결했습니다. Cloudflare가 이 도메인의 DNS 레코드를 관리하며 DNS 표에는 유형이 `Worker`, Content가 `janhyang`으로 표시됩니다.
 
-| 항목 | 값 |
-|---|---|
-| 프로젝트 이름 | `janhyang` |
-| Production branch | `main` |
-| Actions 작업 디렉터리 | `web` |
-| 의존성 설치 | `pnpm install --frozen-lockfile` |
-| 검사 및 빌드 | `pnpm test` (타입 검사·빌드 후 Playwright 실행) |
-| 빌드 결과 | `web/dist` |
-| Node.js | `24` |
-| pnpm | `web/package.json`의 `packageManager` |
-| Cloudflare 자동 Production deployments | Disabled |
-| Cloudflare 자동 Preview deployments | None |
+GitHub Actions는 `web/dist`를 배포 아티팩트로 전달하고 Wrangler의 `deploy --name janhyang --assets dist`로 배포합니다.
 
 GitHub 저장소의 **Settings → Secrets and variables → Actions**에 다음 값을 설정합니다.
 
 | 종류 | 이름 | 값 |
 |---|---|---|
-| Secret | `CLOUDFLARE_API_TOKEN` | 해당 계정의 Cloudflare Pages 편집 권한을 가진 배포 토큰 |
+| Secret | `CLOUDFLARE_API_TOKEN` | 해당 계정의 Cloudflare Workers Scripts 편집 권한을 가진 배포 토큰 |
 | Variable | `CLOUDFLARE_ACCOUNT_ID` | `6ccaac2e604c4c353e2e198c73cac480` |
 
 토큰 원문은 저장소에 커밋하지 않습니다. 배포 토큰은 `main` 배포 단계에서만 사용하며

@@ -4,7 +4,7 @@
 
 **수면에 선을 그으면 현이 됩니다.** 길게 그은 현은 낮게, 짧게 그은 현은 높게 울립니다. 현을 당겼다 놓으면 손을 뗀 자리에서 파문이 번집니다.
 
-[소리 켜고 직접 연주하기 ↗](https://janhyang-924.pages.dev/) · [YouTube에서 ‘반짝반짝 작은 별’ 연주 보기](https://youtu.be/m9J3eBIOgbY)
+[소리 켜고 직접 연주하기 ↗](https://janhyang.yeonseong.dev/) · [YouTube에서 ‘반짝반짝 작은 별’ 연주 보기](https://youtu.be/m9J3eBIOgbY)
 
 ## 첫 연주
 
