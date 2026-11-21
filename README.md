@@ -1,10 +1,10 @@
 # 잔향
 
-[![수면 위의 현을 당겼다 놓으면 파문이 번지는 연주 장면](docs/demo.gif)](https://janhyang-924.pages.dev/)
+[![빈 수면에 첫 현을 긋고 두 번 튕기는 장면](docs/demo.gif)](https://janhyang-924.pages.dev/)
 
 **수면에 선을 그으면 현이 됩니다.** 길게 그은 현은 낮게, 짧게 그은 현은 높게 울립니다. 현을 당겼다 놓으면 손을 뗀 자리에서 파문이 번집니다.
 
-[소리 켜고 직접 연주하기 ↗](https://janhyang-924.pages.dev/) · [데모 영상 보기](docs/demo.mp4)
+[소리 켜고 직접 연주하기 ↗](https://janhyang-924.pages.dev/) · [소리와 함께 ‘반짝반짝 작은 별’ 연주 보기](docs/demo.mp4)
 
 ## 첫 연주
 
