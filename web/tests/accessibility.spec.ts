@@ -21,6 +21,55 @@ test("the closed help disclosure paints a visible keyboard focus indicator", asy
   expect(focused.equals(unfocused), "the outline must not be clipped by details").toBe(false);
 });
 
+test("forced colors keep the playback icon in every state", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce", forcedColors: "active" });
+  let finishLoading!: () => void;
+  const gate = new Promise<void>((resolve) => { finishLoading = resolve; });
+  await page.route("**/janhyang.riv", async (route) => {
+    await gate;
+    await route.continue();
+  });
+  try {
+    await page.goto("/");
+    const playback = page.locator("#playback");
+    const iconIsPainted = async (phase: string) => {
+      await expect(playback).toHaveAttribute("data-phase", phase);
+      const box = (await playback.boundingBox())!;
+      // Only the opaque middle of the button, so the water behind it cannot differ between captures.
+      const clip = { x: box.x + box.width / 2 - 9, y: box.y + box.height / 2 - 9, width: 18, height: 18 };
+      const painted = await page.screenshot({ clip });
+      const style = await page.addStyleTag({ content: "#playback::before { visibility: hidden !important; }" });
+      const blank = await page.screenshot({ clip });
+      await style.evaluate((element) => (element as Element).remove());
+      expect(painted.equals(blank), `${phase} icon`).toBe(false);
+    };
+    await iconIsPainted("idle");
+    await playback.click();
+    await iconIsPainted("loading");
+    finishLoading();
+    await iconIsPainted("playing");
+  } finally {
+    finishLoading();
+  }
+});
+
+test("forced colors draw the focus ring on each capsule instead of the dark water", async ({ page, browserName }) => {
+  test.skip(browserName === "webkit", "WebKit has no forced colors mode");
+  await page.emulateMedia({ reducedMotion: "reduce", forcedColors: "active", colorScheme: "light" });
+  await page.goto("/");
+  await expect(page.locator(".language-picker")).toBeVisible();
+  for (const [target, capsule] of [["#playback", "#playback"], [".controls summary", ".controls summary"], ["#language", ".language-picker"]]) {
+    const control = page.locator(target);
+    await tabTo(page, control);
+    const { x, y, width, height } = (await page.locator(capsule).boundingBox())!;
+    // A slice through the middle: a ring around the outside would reach into the rounded corners.
+    const clip = { x: x + width / 2 - 3, y, width: 6, height };
+    const focused = await page.screenshot({ clip });
+    await control.evaluate((element) => (element as HTMLElement).blur());
+    expect(focused.equals(await page.screenshot({ clip })), target).toBe(false);
+  }
+});
+
 test("a slow instrument announces loading and completion through the existing live region", async ({ page }) => {
   let finishLoading!: () => void;
   const gate = new Promise<void>((resolve) => { finishLoading = resolve; });

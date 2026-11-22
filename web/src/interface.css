@@ -171,87 +171,130 @@ button:not([aria-disabled="true"]):active, .controls summary:active, .language-p
   margin-inline: auto;
   display: flex;
   align-items: center;
-  gap: .25rem;
-  padding: .3125rem;
-  border-radius: 1.9rem;
+  gap: .5rem;
   font-size: .875rem;
   font-weight: 550;
 }
-.controls, .help-sheet, .message, #report {
-  border: 1px solid var(--line);
+.controls summary, .language-picker, .help-sheet, .message, #report {
   background: var(--surface);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 .5rem 2rem rgb(0 0 0 / 32%);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
 }
-.controls:not(:has(> :not([hidden]))) { visibility: hidden; }
+.controls summary, .language-picker::before, .help-sheet, .message, #report {
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+/* The capsules sit too close together to cast shadows without darkening each other. */
+.help-sheet, .message, #report {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 .5rem 2rem rgb(0 0 0 / 32%);
+}
 #playback, .controls summary, .language-picker {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: .5rem;
-  padding: .55rem .95rem;
-  border: 0;
-  border-radius: 1.5rem;
+  /* Never less than half the 44px target, which doesn't shrink with the text. */
+  border-radius: max(22px, 1.5rem);
   line-height: 1.35;
 }
-#playback { background: #e2ecf2; color: #16222c; }
+
+/* A fixed circle, so neither the state nor its translation moves the other controls. */
+#playback {
+  flex: none;
+  width: max(44px, 2.75em);
+  height: max(44px, 2.75em);
+  padding: 0;
+  border: 1px solid transparent;
+  background: #e2ecf2;
+  color: #16222c;
+}
 #playback:not([aria-disabled="true"]):hover { background: #fff; }
 #playback:not([aria-disabled="true"]):active { background: #bfd5e1; }
 #playback[aria-disabled="true"] { background: var(--control); color: var(--secondary); cursor: wait; }
+/* The icons are borders because forced colors replace backgrounds. */
 #playback::before {
   content: "";
+  box-sizing: border-box;
   flex: none;
   width: .75rem;
   height: .875rem;
-  background: currentColor;
+  border-left: .75rem solid currentColor;
   clip-path: polygon(10% 0, 100% 50%, 10% 100%);
 }
 #playback[data-phase="playing"]::before {
-  background: linear-gradient(to right, currentColor 33%, transparent 33% 67%, currentColor 67%);
+  border-inline: .25rem solid currentColor;
   clip-path: none;
 }
 #playback[aria-disabled="true"]::before {
-  width: .75rem;
-  height: .75rem;
+  width: 1rem;
+  height: 1rem;
   border: 2px dotted currentColor;
   border-radius: 50%;
-  background: none;
   clip-path: none;
 }
+
 .controls details { min-width: 0; }
-.controls summary { list-style: none; overflow-wrap: anywhere; text-align: center; }
-.controls summary::-webkit-details-marker { display: none; }
-.controls summary::after {
-  content: "";
-  flex: none;
-  width: .43rem;
-  height: .43rem;
-  border: solid currentColor;
-  border-width: 1.5px 1.5px 0 0;
-  transform: translateY(20%) rotate(-45deg);
+.controls summary {
+  padding: .55rem .95rem;
+  list-style: none;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
-.controls details[open] summary { background: var(--control); }
-.controls details[open] summary::after { transform: translateY(-20%) rotate(135deg); }
+.controls summary::-webkit-details-marker { display: none; }
+.controls details[open] summary { border-color: var(--water); background: var(--control); }
 
 .language-picker {
   position: relative;
   min-width: 44px;
-  min-height: 44px;
-  padding: 0 .625rem;
   color: var(--secondary);
 }
-.language-picker span { direction: ltr; font-size: .75rem; font-weight: 650; }
+/* The select is the capsule's whole box: WebKit doesn't open it from a click on the label. */
 .language-picker select {
-  width: 6rem;
-  padding: 0;
-  border: none;
+  field-sizing: content;
+  width: auto;
+  max-width: 15rem;
+  padding-block: 0;
+  padding-inline: 2.5rem 2.125rem;
+  border: 0;
+  border-radius: inherit;
   color: inherit;
   background: transparent;
+  text-overflow: ellipsis;
+  -webkit-appearance: none;
+  appearance: none;
 }
 .language-picker option { color: #f0f3f7; background: #20242a; }
-@supports (field-sizing: content) {
-  .language-picker select { field-sizing: content; width: auto; max-width: 10rem; }
+.language-picker::before, .language-picker::after, .language-icon {
+  position: absolute;
+  pointer-events: none;
+}
+/* The border is an overlay, so snapping it to device pixels can't resize the capsule around the select. */
+.language-picker::before {
+  content: "";
+  inset: 0;
+  border-radius: inherit;
+}
+.language-icon {
+  inset-block: 0;
+  inset-inline-start: .9375rem;
+  width: 1.0625rem;
+  height: 1.0625rem;
+  margin-block: auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.language-picker::after {
+  content: "";
+  box-sizing: border-box;
+  top: 50%;
+  inset-inline-end: 1.0625rem;
+  width: .4375rem;
+  height: .4375rem;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: translateY(-70%) rotate(45deg);
 }
 .language-picker:focus-within { outline: 2px solid var(--water); outline-offset: 2px; }
 .language-picker select:focus-visible { outline: none; }
@@ -333,9 +376,13 @@ button:not([aria-disabled="true"]):active, .controls summary:active, .language-p
 }
 
 @media (max-width: 36rem) {
-  .controls { gap: 0; }
-  #playback, .controls summary { padding-inline: .75rem; }
-  .language-picker select { position: absolute; inset: 0; width: 100%; opacity: 0; }
+  .controls summary { padding-inline: .75rem; }
+  /* Icon-only controls stop growing here, leaving enlarged text the room it needs. */
+  #playback { width: 44px; height: 44px; }
+  .language-picker { flex: none; }
+  .language-picker select { width: 44px; height: 44px; padding: 0; opacity: 0; }
+  .language-picker::after { display: none; }
+  .language-icon { inset-inline: 0; margin-inline: auto; }
   .water-title { top: 18%; }
 }
 @media (max-height: 28rem) {
@@ -344,10 +391,14 @@ button:not([aria-disabled="true"]):active, .controls summary:active, .language-p
   .water-title h1 { font-size: 2.75rem; }
   .water-title p { margin-top: .375rem; font-size: .875rem; }
 }
+@media (forced-colors: active) {
+  /* The canvas stays dark under a light palette, so the ring belongs on the capsule's own background. */
+  #playback:focus-visible, .controls summary:focus-visible, .language-picker:focus-within { outline-offset: -4px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .water-intro { transition: none; }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   :root { --surface: #20242a; --line: #7b8794; --secondary: #e0e5e9; }
-  .controls, .help-sheet, .message, #report { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .controls summary, .language-picker, .help-sheet, .message, #report { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }

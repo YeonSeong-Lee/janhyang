@@ -48,6 +48,7 @@ test("each advertised language translates the instrument without restarting it",
   await page.locator("#harmony-mood").selectOption("2");
   await page.locator("#harmony-seed").click();
   const picker = page.locator("#language");
+  const dock = page.locator("#playback, .controls summary");
   const tags = await picker.locator("option").evaluateAll(options => options.map(o => (o as HTMLOptionElement).value));
   expect(tags.sort()).toEqual([...catalogs.keys()].sort());
   for (const tag of tags) {
@@ -55,8 +56,14 @@ test("each advertised language translates the instrument without restarting it",
     await picker.selectOption(tag);
     await expect(page.locator("html")).toHaveAttribute("lang", tag);
     await expect(picker).toHaveAccessibleName(copy.language);
+    await expect(page.locator(".language-picker")).toHaveAttribute("title", copy.language);
+    // The tooltip must not come back to screen readers as a description that repeats the name.
+    await expect(picker).toHaveAccessibleDescription("");
     await expect(page.locator("#stage")).toHaveAccessibleName(copy.canvas);
     await expect(page.locator("#playback")).toHaveText(copy.pause);
+    await expect(page.locator("#playback")).toHaveAttribute("title", copy.pause);
+    const heights = await dock.evaluateAll(controls => controls.map(control => Math.round(control.getBoundingClientRect().height)));
+    expect(heights, `${tag} fits on one line`).toEqual([44, 44]);
     await expect(page.locator("#harmony-description")).toHaveText(copy.warmHint);
     await expect(page.locator("#harmony-notes > span").first()).toHaveText(copy.noteNames[5]);
     await expect(page.locator("#selection")).toContainText("C4");

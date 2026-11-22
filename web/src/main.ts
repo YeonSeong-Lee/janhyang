@@ -15,6 +15,7 @@ const loadingScreen = document.querySelector<HTMLElement>("#loading-screen")!;
 const loadingCaption = document.querySelector<HTMLParagraphElement>("#loading-caption")!;
 const waterIntro = document.querySelector<HTMLElement>(".water-intro")!;
 const playback = document.querySelector<HTMLButtonElement>("#playback")!;
+const playbackLabel = playback.querySelector("span")!;
 const retry = document.querySelector<HTMLButtonElement>("#retry")!;
 const instrumentControls = document.querySelector<HTMLFieldSetElement>("#instrument-controls")!;
 const instrumentHint = document.querySelector<HTMLParagraphElement>("#instrument-hint")!;
@@ -37,6 +38,7 @@ const harmonyPluck = document.querySelector<HTMLButtonElement>("#harmony-pluck")
 const harmonyDemo = document.querySelector<HTMLButtonElement>("#harmony-demo")!;
 const help = document.querySelector<HTMLDetailsElement>(".controls details")!;
 const languagePicker = document.querySelector<HTMLSelectElement>("#language")!;
+const languageCapsule = languagePicker.closest("label")!;
 const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const debug = new URLSearchParams(location.search).has("debug");
 const lines: string[] = [];
@@ -175,7 +177,10 @@ function renderPlayback(state: Readonly<PlaybackState>): void {
   playback.hidden = failed;
   playback.dataset.phase = state.phase;
   playback.setAttribute("aria-disabled", String(loading));
-  playback.textContent = loading ? messages.busy : state.phase === "playing" ? messages.pause : messages.play;
+  const action = loading ? messages.busy : state.phase === "playing" ? messages.pause : messages.play;
+  // The button shows only an icon. The same word names it and serves as its tooltip.
+  playbackLabel.textContent = action;
+  playback.title = action;
   canvas.inert = state.phase !== "playing";
   updateInstrumentControls();
 }
@@ -252,6 +257,8 @@ if (import.meta.hot) import.meta.hot.dispose(() => cleanup());
 function renderLanguage(): void {
   languagePicker.value = locale;
   translateDocument(languagePicker.selectedOptions[0].dir);
+  // On the label: a title on the select would repeat its name as a description.
+  languageCapsule.title = messages.language;
   help.hidden = false;
   canvas.removeAttribute("lang");
   renderSelection();
@@ -277,7 +284,7 @@ languagePicker.addEventListener("change", async () => {
 async function start(): Promise<void> {
   await setLanguage(document.documentElement.lang).catch(error => note(`language load error: ${error}`));
   if (events.signal.aborted) return;
-  languagePicker.closest("label")!.hidden = false;
+  languageCapsule.hidden = false;
   instrumentControls.hidden = false;
   renderLanguage();
   session.start();

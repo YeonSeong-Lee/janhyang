@@ -102,7 +102,7 @@
         <button data-i18n="retry" id="retry" type="button" hidden>다시 불러오기</button>
       </div>
       <div class="controls">
-        <button id="playback" type="button" aria-controls="stage" hidden>재생</button>
+        <button id="playback" type="button" aria-controls="stage" hidden><span class="visually-hidden">재생</span></button>
         <details>
           <summary><span data-i18n="help">사용 안내</span></summary>
           <div class="help-sheet">
@@ -160,7 +160,10 @@
           </div>
         </details>
         <label class="language-picker" hidden>
-          <span aria-hidden="true">文/A</span>
+          <!-- Icon: Lucide "languages" (ISC), see third-party-licenses.txt -->
+          <svg class="language-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6" />
+          </svg>
           <select id="language" name="janhyang:language" aria-label="언어" data-i18n-label="language" autocomplete="off"><!-- language-options --></select>
         </label>
       </div>
@@ -169,7 +172,7 @@
         <style>#loading-screen, .controls { display: none; } .water-intro { opacity: 0; } .message { max-height: 90dvh; overflow: auto; } .message li { margin: 8px 0; }</style>
         <div class="message">
           <p>잔향은 JavaScript로 소리와 파문을 만듭니다. 브라우저에서 JavaScript를 켜고 다시 열어 주세요.</p>
-          <details><summary lang="en">文/A · Languages</summary><ul><!-- language-notices --></ul></details>
+          <details><summary lang="en">文A · Languages</summary><ul><!-- language-notices --></ul></details>
         </div>
       </noscript>
     </main>
